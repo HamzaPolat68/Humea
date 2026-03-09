@@ -1,6 +1,6 @@
 # humea
 
-A new Flutter project.
+Abant İzzet Baysal Üniversitesi Bilgisayar Mühendisliği Bitirme Projesi 
 
 ## Getting Started
 
