@@ -79,7 +79,7 @@ class SignUpPage extends StatelessWidget {
                 child: Column(
                   children: [
                     const Text(
-                      "Zaten Hesabınız Var mı?",
+                      "Zaten Hesabınız Var Mı?",
                       style: TextStyle(color: Colors.grey),
                     ),
                     TextButton(
