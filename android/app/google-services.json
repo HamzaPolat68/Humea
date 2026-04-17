@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "885686922988",
+    "project_id": "humea-a92e9",
+    "storage_bucket": "humea-a92e9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:885686922988:android:69d500c134f30579c77fc9",
+        "android_client_info": {
+          "package_name": "com.hp.humea"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCc_s_voMQQJ9Zt_efU5gGV8Vsmdvtz8hc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

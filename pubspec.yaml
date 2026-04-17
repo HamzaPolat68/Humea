@@ -1,0 +1,33 @@
+name: humea
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  firebase_core: ^4.7.0
+  # İkonlar ve Animasyonlar
+  cupertino_icons: ^1.0.8
+  animate_do: ^4.0.0
+  
+  # Sosyal medya ikonları için kullanışlıdır (Opsiyonel)
+  font_awesome_flutter: ^10.7.0
+  firebase_auth: ^6.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  # Eğer ileride kendi resimlerini (logo vb.) eklemek istersen 
+  # aşağıdaki yorum satırlarını aktif edebilirsin:
+  # assets:
+  #   - assets/images/
