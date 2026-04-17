@@ -1,6 +1,6 @@
 # humea
 
-Humea
+
 Bolu Abant İzzet Baysal Üniversitesi Mühendislik Fakültesi, Bilgisayar Mühendisliği Bölümü 4. Sınıf Bitirme Projesi Ödevi
 
 Humea, kullanıcıların duygu durumlarını takip edebildikleri ve sosyal bir akış üzerinden etkileşim kurabildikleri, Flutter SDK kullanılarak geliştirilmiş bir mobil uygulamadır.
