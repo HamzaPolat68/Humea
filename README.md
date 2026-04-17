@@ -5,7 +5,7 @@ Bolu Abant İzzet Baysal Üniversitesi Mühendislik Fakültesi, Bilgisayar Mühe
 
 Humea, kullanıcıların duygu durumlarını takip edebildikleri ve sosyal bir akış üzerinden etkileşim kurabildikleri, Flutter SDK kullanılarak geliştirilmiş bir mobil uygulamadır.
 
-Proje Hakkında
+Proje Hakkında :
 Bu proje, lisans eğitiminin bitirme çalışması kapsamında, modern mobil uygulama geliştirme teknikleri ve kullanıcı deneyimi (UX) prensipleri temel alınarak hazırlanmıştır.
 
 Teknoloji Yığını: Flutter & Dart
