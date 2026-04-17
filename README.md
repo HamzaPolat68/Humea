@@ -17,8 +17,6 @@ Eğer bu projeyi yerel ortamınızda çalıştırmak isterseniz şu adımları i
 
 Flutter SDK'nın bilgisayarınızda kurulu olduğundan emin olun.
 
-Projeyi klonlayın: git clone https://github.com/kullaniciadi/humea.git
-
 Bağımlılıkları yükleyin: flutter pub get
 
 Uygulamayı çalıştırın: flutter run
