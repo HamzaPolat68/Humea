@@ -68,35 +68,86 @@ class _FeedPageState extends State<FeedPage> {
 
   Future<void> _deletePostAndMood(String docId, DateTime postDate) async {
     try {
+      final firestore = FirebaseFirestore.instance;
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+
+      if (userId == null) return;
+
       // 1. Paylaşımı Sil
-      await FirebaseFirestore.instance.collection('posts').doc(docId).delete();
+      await firestore.collection('posts').doc(docId).delete();
 
       // 2. İlgili mood kaydını bul ve sil
-      final moodQuery = await FirebaseFirestore.instance
+      double deletedMoodValue = 0.0;
+      bool moodDeleted = false;
+      final moodQuery = await firestore
           .collection('moods')
-          .where('userId', isEqualTo: _currentUserId)
+          .where('userId', isEqualTo: userId)
           .get();
 
       for (var doc in moodQuery.docs) {
-        Timestamp ts = doc.data()['date'] as Timestamp;
-        DateTime moodDate = ts.toDate();
+        final moodData = doc.data() as Map<String, dynamic>;
+        final Timestamp ts = moodData['date'] as Timestamp;
+        final DateTime moodDate = ts.toDate();
 
-        // Aynı gün içindeki kaydı bul (yıl, ay, gün kontrolü)
         if (moodDate.year == postDate.year &&
             moodDate.month == postDate.month &&
             moodDate.day == postDate.day) {
+          final dynamic moodValueRaw =
+              moodData['moodValue'] ??
+              moodData['value'] ??
+              moodData['score'] ??
+              moodData['mood_score'];
+
+          if (moodValueRaw is num) {
+            deletedMoodValue = moodValueRaw.toDouble();
+          } else if (moodValueRaw is String) {
+            deletedMoodValue = double.tryParse(moodValueRaw) ?? 0.0;
+          }
+
           await doc.reference.delete();
-          break; // Sadece eşleşen ilkini sil
+          moodDeleted = true;
+          break;
         }
       }
 
-      // 3. ÖNEMLİ: İşlem bittiğinde HomePage'e haber ver ve bitmesini bekle
+      if (moodDeleted) {
+        // 3. mood_stats Güncelleme (Atomic Transaction kullanılması önerilir)
+        await firestore.runTransaction((transaction) async {
+          DocumentReference statsRef = firestore
+              .collection('mood_stats')
+              .doc(userId);
+          DocumentSnapshot statsSnapshot = await transaction.get(statsRef);
+
+          if (statsSnapshot.exists) {
+            Map<String, dynamic> data =
+                statsSnapshot.data() as Map<String, dynamic>;
+
+            // Örnek: Toplam puan ve sayı üzerinden yeni ortalama hesaplama
+            int currentCount = data['count'] ?? 1;
+            double currentTotal = (data['totalScore'] ?? deletedMoodValue)
+                .toDouble();
+
+            int newCount = currentCount > 1 ? currentCount - 1 : 0;
+            double newTotal = currentTotal - deletedMoodValue;
+            double newAverage = newCount > 0 ? (newTotal / newCount) : 0;
+
+            transaction.update(statsRef, {
+              'totalScore': newTotal,
+              'count': newCount,
+              'averageScore': newAverage,
+              'lastUpdated': FieldValue.serverTimestamp(),
+            });
+          }
+        });
+      }
+
+      // 4. UI'ı Güncelle
       await widget.onPostDeleted();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Paylaşım ve ilgili duygu kaydı başarıyla silindi."),
+            content: Text("Kayıt ve istatistikler başarıyla güncellendi."),
           ),
         );
       }
