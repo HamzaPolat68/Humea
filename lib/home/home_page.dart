@@ -48,13 +48,13 @@ class _HomePageState extends State<HomePage> {
   };
 
   @override
-  @override
   void initState() {
     super.initState();
     // Firebase Auth durumunu kontrol edip öyle yükleme yapın
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
       if (user != null) {
         _loadMoodsFromFirestore();
+        _loadStatsFromFirestore();
       }
     });
   }
@@ -87,6 +87,59 @@ class _HomePageState extends State<HomePage> {
   }
 
   // _HomePageState sınıfının içinde:
+  // İstatistikleri Firebase'den çeken yeni fonksiyon
+  Future<void> _loadStatsFromFirestore() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('mood_stats')
+        .doc(user.uid)
+        .get();
+
+    if (doc.exists) {
+      // Burada gelen istatistikleri kullanabilirsin.
+      // Örneğin: double ortalama = doc.data()?['averageScore'];
+      print("İstatistikler yüklendi: ${doc.data()}");
+    }
+  }
+
+  Future<void> _updateStatsInFirebase(String userId, {double? newScore}) async {
+    try {
+      // 1. Veri kontrolü
+      if (_allMoodEntries.isEmpty) {
+        print("Kayıtlı mod girişi bulunamadı, istatistik hesaplanamadı.");
+        return;
+      }
+
+      // 2. Ortalama hesaplama
+      double totalScore = _allMoodEntries
+          .map((e) => e.score)
+          .reduce((a, b) => a + b);
+      double averageScore = totalScore / _allMoodEntries.length;
+
+      print(
+        "İstatistik hesaplanıyor: Ortalama $averageScore, Adet ${_allMoodEntries.length}",
+      );
+
+      // 3. Yazma işlemi
+      await FirebaseFirestore.instance
+          .collection('mood_stats')
+          .doc(userId) // Doküman ID'si kullanıcı ID'si olmalı
+          .set({
+            'averageScore': averageScore,
+            'entryCount': _allMoodEntries.length,
+            'lastUpdated':
+                FieldValue.serverTimestamp(), // Daha güvenilir zaman damgası
+          }, SetOptions(merge: true));
+
+      print("Başarıyla Firestore'a kaydedildi.");
+    } catch (e) {
+      // Hatanın detaylı yazdırılması
+      print("!!! İstatistik güncelleme hatası: $e");
+    }
+  }
+
   Future<void> _refreshData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -142,7 +195,7 @@ class _HomePageState extends State<HomePage> {
         'date': Timestamp.fromDate(now), // Timestamp saati de içerir
         'score': score,
       });
-
+      await _updateStatsInFirebase(user.uid);
       // Yerel listeyi güncelle
       setState(() {
         _allMoodEntries.add(MoodEntry(date: now, score: score));
