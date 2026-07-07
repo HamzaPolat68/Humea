@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 import '../models/post_model.dart';
 
 class FeedPage extends StatefulWidget {
@@ -15,8 +14,9 @@ class FeedPage extends StatefulWidget {
 }
 
 class _FeedPageState extends State<FeedPage> {
-  List<String> _likedPostIds = [];
-  final String? _currentUserId = FirebaseAuth.instance.currentUser?.uid;
+  Set<String> _likedCommentIds = {};
+  bool isPostLikedByMe = false;
+
   final String? _currentUserName =
       FirebaseAuth.instance.currentUser?.displayName;
 
@@ -27,6 +27,7 @@ class _FeedPageState extends State<FeedPage> {
   void initState() {
     super.initState();
     _loadLikedPosts();
+    _loadLikedComments();
   }
 
   // Bellek sızıntısını önlemek için controller temizleniyor
@@ -37,31 +38,79 @@ class _FeedPageState extends State<FeedPage> {
   }
 
   Future<void> _loadLikedPosts() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _likedPostIds = prefs.getStringList('liked_posts_history') ?? [];
-    });
+    // SharedPreferences for liked posts can be managed locally if needed
   }
 
-  Future<void> _toggleLike(String docId) async {
+  Future<void> _loadLikedComments() async {
     final prefs = await SharedPreferences.getInstance();
-    final bool isAlreadyLiked = _likedPostIds.contains(docId);
+    final likedCommentIds = prefs
+        .getKeys()
+        .where((key) => key.startsWith('liked_comment_'))
+        .map((key) => key.substring('liked_comment_'.length))
+        .toSet();
+
+    if (mounted) {
+      setState(() {
+        _likedCommentIds = likedCommentIds;
+      });
+    }
+  }
+
+  Future<void> _toggleLike(Post post) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final docRef = FirebaseFirestore.instance.collection('posts').doc(post.id);
+
+    // 1. Durumu yerelde (UI'da) hemen değiştiriyoruz (setState ile)
+    final currentState = isPostLikedByMe; // Tıklamadan önceki durumu tut
+    setState(() {
+      isPostLikedByMe = !isPostLikedByMe;
+    });
 
     try {
-      if (isAlreadyLiked) {
-        await FirebaseFirestore.instance.collection('posts').doc(docId).update({
+      // 2. Firestore işlemleri
+      if (currentState) {
+        // Zaten beğenmişiz, şimdi "beğeniyi geri çekiyoruz"
+        await docRef.update({
           'likes': FieldValue.increment(-1),
+          'likesList': FieldValue.arrayRemove([
+            {
+              'userId': user.uid,
+              'userName': user.displayName ?? 'Anonim',
+              'userImage': user.photoURL ?? '',
+            },
+          ]),
         });
-        _likedPostIds.remove(docId);
       } else {
-        await FirebaseFirestore.instance.collection('posts').doc(docId).update({
+        // Beğenmemişiz, şimdi "beğeniyoruz"
+        await docRef.update({
           'likes': FieldValue.increment(1),
+          'likesList': FieldValue.arrayUnion([
+            {
+              'userId': user.uid,
+              'userName': user.displayName ?? 'Anonim',
+              'userImage': user.photoURL ?? '',
+            },
+          ]),
         });
-        _likedPostIds.add(docId);
+
+        if (post.userId != user.uid) {
+          await FirebaseFirestore.instance.collection('notifications').add({
+            'recipientId': post.userId,
+            'senderId': user.uid,
+            'senderName': user.displayName ?? 'Anonim',
+            'type': 'like',
+            'isRead': false,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+        }
       }
-      await prefs.setStringList('liked_posts_history', _likedPostIds);
-      setState(() {});
     } catch (e) {
+      // Hata olursa durumu geri al
+      setState(() {
+        isPostLikedByMe = currentState;
+      });
       debugPrint("Beğeni hatası: $e");
     }
   }
@@ -85,7 +134,7 @@ class _FeedPageState extends State<FeedPage> {
           .get();
 
       for (var doc in moodQuery.docs) {
-        final moodData = doc.data() as Map<String, dynamic>;
+        final moodData = doc.data();
         final Timestamp ts = moodData['date'] as Timestamp;
         final DateTime moodDate = ts.toDate();
 
@@ -249,9 +298,16 @@ class _FeedPageState extends State<FeedPage> {
   }
 
   Widget _buildPostCard(Post post) {
-    final bool isPostLikedByMe = _likedPostIds.contains(post.id);
+    final String? currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    final bool isPostLikedByMe =
+        currentUserId != null &&
+        post.likesList.any((like) => like['userId'] == currentUserId);
     final bool isMyPost =
         _currentUserName != null && post.userName == _currentUserName;
+
+    debugPrint(
+      "DEBUG - Post ID: ${post.id} - User Image Değeri: '${post.userImage}'",
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -259,11 +315,11 @@ class _FeedPageState extends State<FeedPage> {
         color: const Color.fromARGB(255, 236, 234, 234),
         borderRadius: BorderRadius.circular(24), // Daha yuvarlak köşeler
         border: Border.all(
-          color: Colors.grey.withOpacity(0.1),
+          color: Colors.grey.withValues(alpha: 0.1),
         ), // Çok hafif bir çerçeve
         boxShadow: [
           BoxShadow(
-            color: Colors.blue.withOpacity(0.05),
+            color: Colors.blue.withValues(alpha: 0.05),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -279,13 +335,18 @@ class _FeedPageState extends State<FeedPage> {
                 padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                  border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
                 ),
                 child: CircleAvatar(
                   radius: 20,
+                  // backgroundImage için ternary operatörü kullanarak mantığı kuruyoruz
                   backgroundImage: post.userImage.isNotEmpty
-                      ? NetworkImage(post.userImage)
+                      ? (post.userImage.startsWith('http')
+                            ? NetworkImage(post.userImage) as ImageProvider
+                            : FileImage(File(post.userImage)) as ImageProvider)
                       : null,
+
+                  // Eğer hiç resim yoksa ismin baş harfini göster
                   child: post.userImage.isEmpty
                       ? Text(post.userName[0].toUpperCase())
                       : null,
@@ -362,12 +423,210 @@ class _FeedPageState extends State<FeedPage> {
               color: Colors.grey[50],
               borderRadius: BorderRadius.circular(12),
             ),
-            child: _interactionButton(
-              icon: isPostLikedByMe ? Icons.favorite : Icons.favorite_border,
-              label: "Beğen",
-              likeCount: post.likes,
-              isLiked: isPostLikedByMe,
-              onTap: () => _toggleLike(post.id),
+            child: Row(
+              children: [
+                // Mevcut butonunuza dokunmadık
+                _interactionButton(
+                  icon: isPostLikedByMe
+                      ? Icons.favorite
+                      : Icons.favorite_border,
+                  label: "Beğen",
+                  likeCount: post.likes,
+                  isLiked: isPostLikedByMe,
+                  onLikeToggle: () => _toggleLike(post), // Kalbe basınca
+                  onShowLikes: () => _showLikesDialog(
+                    context,
+                    post.likesList,
+                  ), // Sayıya basınca
+                ),
+                const SizedBox(width: 8),
+                // Yeni Yorum Butonu
+                // Yorum Butonu
+                Expanded(
+                  child: _interactionButton(
+                    icon: Icons.chat_bubble_outline,
+                    label: "Yorum  ",
+                    likeCount: post.commentsCount,
+                    isLiked: false,
+                    onTap: () {
+                      // Yorum yazmak için geçici bir controller
+                      final TextEditingController commentFieldController =
+                          TextEditingController();
+
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.white,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
+                        ),
+                        builder: (context) => Padding(
+                          // Klavyenin modalı yukarı itmesini sağlar
+                          padding: EdgeInsets.only(
+                            bottom: MediaQuery.of(context).viewInsets.bottom,
+                          ),
+                          child: DraggableScrollableSheet(
+                            initialChildSize: 0.6,
+                            minChildSize: 0.3,
+                            maxChildSize: 0.9,
+                            expand: false,
+                            builder: (context, scrollController) {
+                              return Column(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    child: const Text(
+                                      "Yorumlar",
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+
+                                  // YORUMLARI LİSTELEME
+                                  Expanded(
+                                    child: StreamBuilder<QuerySnapshot>(
+                                      stream: FirebaseFirestore.instance
+                                          .collection('posts')
+                                          .doc(post.id)
+                                          .collection('comments')
+                                          .orderBy(
+                                            'timestamp',
+                                            descending: true,
+                                          )
+                                          .snapshots(),
+                                      builder: (context, snapshot) {
+                                        if (!snapshot.hasData) {
+                                          return const Center(
+                                            child: CircularProgressIndicator(),
+                                          );
+                                        }
+
+                                        // StreamBuilder içindeki ListView.builder kısmını güncelle
+                                        return ListView.builder(
+                                          controller: scrollController,
+                                          itemCount: snapshot.data!.docs.length,
+                                          itemBuilder: (context, index) {
+                                            var doc =
+                                                snapshot.data!.docs[index];
+                                            final String currentUserId =
+                                                FirebaseAuth
+                                                    .instance
+                                                    .currentUser
+                                                    ?.uid ??
+                                                "";
+                                            final bool isMyComment =
+                                                doc['userId'] == currentUserId;
+                                            final bool isCommentLiked =
+                                                _likedCommentIds.contains(
+                                                  doc.id,
+                                                );
+
+                                            return ListTile(
+                                              title: Text(
+                                                doc['userName'] ?? "Anonim",
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              subtitle: Text(doc['text'] ?? ""),
+                                              trailing: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  // Beğeni Sayısı ve Butonu
+                                                  Text(
+                                                    "${doc['likesCount'] ?? 0}",
+                                                  ),
+                                                  IconButton(
+                                                    icon: Icon(
+                                                      isCommentLiked
+                                                          ? Icons.favorite
+                                                          : Icons
+                                                                .favorite_border,
+                                                      color: isCommentLiked
+                                                          ? Colors.grey
+                                                          : Colors.red,
+                                                    ),
+                                                    onPressed: () =>
+                                                        _toggleCommentLike(
+                                                          post.id,
+                                                          doc.id,
+                                                        ),
+                                                  ),
+                                                  // Silme Butonu
+                                                  if (isMyComment)
+                                                    IconButton(
+                                                      icon: const Icon(
+                                                        Icons.delete_outline,
+
+                                                        color: Colors.red,
+                                                      ),
+                                                      onPressed: () =>
+                                                          _deleteComment(
+                                                            post.id,
+                                                            doc.id,
+                                                          ),
+                                                    ),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
+                                  ),
+
+                                  // YORUM YAZMA ALANI
+                                  Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: TextField(
+                                            controller: commentFieldController,
+                                            decoration: InputDecoration(
+                                              hintText: "Yorum ekle...",
+                                              border: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.send,
+                                            color: Colors.blue,
+                                          ),
+                                          onPressed: () {
+                                            if (commentFieldController.text
+                                                .trim()
+                                                .isNotEmpty) {
+                                              // Yorumu ekle
+                                              _addComment(
+                                                post.id,
+                                                commentFieldController.text,
+                                              );
+                                              commentFieldController.clear();
+                                            }
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -380,31 +639,38 @@ class _FeedPageState extends State<FeedPage> {
     required String label,
     required int likeCount,
     required bool isLiked,
-    required VoidCallback onTap,
+    VoidCallback? onLikeToggle,
+    VoidCallback? onShowLikes,
+    VoidCallback? onTap,
   }) {
     return InkWell(
-      onTap: onTap,
       borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         child: Row(
           children: [
-            Icon(
-              icon,
-              color: isLiked
-                  ? Colors.red
-                  : (likeCount > 0 ? Colors.red[300] : Colors.grey[600]),
-              size: 20,
+            // Kalp İkonu
+            IconButton(
+              icon: Icon(icon, color: isLiked ? Colors.red : Colors.grey[600]),
+              onPressed: onLikeToggle,
+              constraints: const BoxConstraints(), // Padding'i küçültmek için
+              padding: EdgeInsets.zero,
             ),
             const SizedBox(width: 6),
-            Text(
-              likeCount > 0 ? "$label  •  $likeCount" : label,
-              style: TextStyle(
-                color: isLiked
-                    ? Colors.red[700]
-                    : (likeCount > 0 ? Colors.red[300] : Colors.grey[600]),
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
+            // Sayı ve Label (Tıklanınca beğenenleri gösterir)
+            GestureDetector(
+              onTap: onShowLikes,
+              child: Text(
+                likeCount > 0 ? "$label • $likeCount" : label,
+                style: TextStyle(
+                  color: isLiked ? Colors.red[700] : Colors.grey[600],
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  decoration: onShowLikes != null
+                      ? TextDecoration.underline
+                      : TextDecoration.none,
+                ),
               ),
             ),
           ],
@@ -412,4 +678,127 @@ class _FeedPageState extends State<FeedPage> {
       ),
     );
   }
+
+  Future<void> _addComment(String postId, String text) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final commentText = text.trim();
+      if (commentText.isEmpty) return;
+
+      final commentData = {
+        'text': commentText,
+        'userId': user.uid,
+        'userName': user.displayName ?? 'Anonim',
+        'timestamp': FieldValue.serverTimestamp(),
+        'likesCount': 0, // Başlangıç beğeni sayısı
+      };
+
+      final postRef = FirebaseFirestore.instance
+          .collection('posts')
+          .doc(postId);
+      await postRef.collection('comments').add(commentData);
+      await postRef.update({'commentsCount': FieldValue.increment(1)});
+    } catch (e) {
+      debugPrint('Yorum ekleme hatası: $e');
+    }
+  }
+
+  Future<void> _toggleCommentLike(String postId, String commentId) async {
+    final prefs = await SharedPreferences.getInstance();
+    String key = 'liked_comment_$commentId';
+    bool isAlreadyLiked = _likedCommentIds.contains(commentId);
+
+    final commentRef = FirebaseFirestore.instance
+        .collection('posts')
+        .doc(postId)
+        .collection('comments')
+        .doc(commentId);
+
+    await commentRef.update({
+      'likesCount': FieldValue.increment(isAlreadyLiked ? -1 : 1),
+    });
+
+    await prefs.setBool(key, !isAlreadyLiked);
+
+    if (mounted) {
+      setState(() {
+        if (isAlreadyLiked) {
+          _likedCommentIds.remove(commentId);
+        } else {
+          _likedCommentIds.add(commentId);
+        }
+      });
+    }
+  }
+
+  Future<void> _deleteComment(String postId, String commentId) async {
+    try {
+      final postRef = FirebaseFirestore.instance
+          .collection('posts')
+          .doc(postId);
+      await postRef.collection('comments').doc(commentId).delete();
+      await postRef.update({'commentsCount': FieldValue.increment(-1)});
+    } catch (e) {
+      debugPrint('Yorum silme hatası: $e');
+    }
+  }
+}
+
+void _showLikesDialog(
+  BuildContext context,
+  List<Map<String, dynamic>> likesList,
+) {
+  showModalBottomSheet(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (context) {
+      return Column(
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text(
+              "Beğenenler",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: likesList.isEmpty
+                ? const Center(child: Text("Henüz beğenen yok."))
+                : ListView.builder(
+                    itemCount: likesList.length,
+                    itemBuilder: (context, index) {
+                      final like = likesList[index];
+                      final String userImage = (like['userImage'] ?? '')
+                          .toString();
+                      final String userName = (like['userName'] ?? 'Anonim')
+                          .toString();
+
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage: userImage.isNotEmpty
+                              ? (userImage.startsWith('http')
+                                    ? NetworkImage(userImage)
+                                    : FileImage(File(userImage)))
+                              : null,
+                          child: userImage.isEmpty
+                              ? Text(
+                                  userName.isNotEmpty
+                                      ? userName[0].toUpperCase()
+                                      : 'A',
+                                )
+                              : null,
+                        ),
+                        title: Text(userName),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      );
+    },
+  );
 }

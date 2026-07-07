@@ -19,6 +19,7 @@ class NotePage extends StatefulWidget {
 
 class _NotePageState extends State<NotePage> {
   final TextEditingController _noteController = TextEditingController();
+  final TextEditingController _commentController = TextEditingController();
 
   // HAZIR YAZILAR LİSTESİ
   final List<String> _suggestions = [
@@ -33,14 +34,24 @@ class _NotePageState extends State<NotePage> {
     switch (emoji) {
       case "😍":
         return "Harika!";
+      case "🤩":
+        return "Heyecanlı";
       case "🙂":
         return "İyi";
+      case "😊":
+        return "Huzurlu";
       case "😞":
         return "Hüzünlü";
+      case "🤔":
+        return "Düşünceli";
       case "😡":
-        return "Sinirli";
+        return "Öfkeli";
+      case "😟":
+        return "Endişeli";
       case "💤":
         return "Yorgun";
+      case "😰":
+        return "Çok Kaygılı";
       default:
         return "Normal";
     }
@@ -49,7 +60,24 @@ class _NotePageState extends State<NotePage> {
   @override
   void dispose() {
     _noteController.dispose();
+    _commentController.dispose();
     super.dispose();
+  }
+
+  Future<void> _addComment(String postId, String commentText) async {
+    if (commentText.trim().isEmpty) return;
+    final user = FirebaseAuth.instance.currentUser;
+
+    await FirebaseFirestore.instance
+        .collection('posts')
+        .doc(postId)
+        .collection('comments')
+        .add({
+          'text': commentText,
+          'userName': user?.displayName ?? "Anonim",
+          'timestamp': FieldValue.serverTimestamp(),
+          'userId': user?.uid,
+        });
   }
 
   @override
@@ -134,7 +162,9 @@ class _NotePageState extends State<NotePage> {
                       note: finalNote,
                       timestamp: DateTime.now(),
                       likes: 0,
+                      commentsCount: 0,
                       userId: user?.uid ?? 'unknown',
+                      likesList: [],
                     );
 
                     try {

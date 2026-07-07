@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:humea/features/auth/login_page.dart';
 import 'package:humea/mood/mood_chart_page.dart';
@@ -40,16 +41,25 @@ class _HomePageState extends State<HomePage> {
   int _currentChartPeriod = 0;
 
   final Map<String, double> _emojiToScore = {
-    "😍": 5.0,
-    "🙂": 4.0,
-    "😞": 3.0,
-    "😡": 2.0,
-    "💤": 1.0,
+    "😍": 10.0, // Harika
+    "🤩": 9.0, // Heyecanlı
+    "🙂": 8.0, // İyi/Mutlu
+    "😊": 7.0, // Huzurlu/Pozitif
+    "😞": 6.0, // Hüzünlü
+    "🤔": 5.0, // Nötr/Düşünceli
+    "😡": 4.0, // Öfkeli
+    "😟": 3.0, // Endişeli
+    "💤": 2.0, // Yorgun
+    "😰": 1.0, // Çok Kaygılı
   };
 
   @override
   void initState() {
     super.initState();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      setupNotifications(user.uid);
+    }
     // Firebase Auth durumunu kontrol edip öyle yükleme yapın
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
       if (user != null) {
@@ -57,6 +67,19 @@ class _HomePageState extends State<HomePage> {
         _loadStatsFromFirestore();
       }
     });
+  }
+
+  Future<void> setupNotifications(String userId) async {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+    await messaging.requestPermission(alert: true, badge: true, sound: true);
+    String? token = await messaging.getToken();
+
+    if (token != null) {
+      await FirebaseFirestore.instance.collection('users').doc(userId).set({
+        'fcmToken': token,
+      }, SetOptions(merge: true));
+    }
   }
 
   // --- FİREBASE'DEN VERİLERİ ÇEKME ---
@@ -184,11 +207,11 @@ class _HomePageState extends State<HomePage> {
     // DateTime.now() ile o anki saati alıyoruz, böylece aynı gün içinde
     // farklı saatlerde birden fazla kayıt oluşturulabilir.
     DateTime now = DateTime.now();
-    double score = _emojiToScore[emoji] ?? 4.0;
+    double score = _emojiToScore[emoji] ?? 5.0;
+
+    print("KAYDEDİLEN PUAN: $score"); // Konsolda kaç yazıyor?
 
     try {
-      // --- BURADAKİ 'alreadyEnteredToday' KONTROLÜNÜ SİLİYORUZ ---
-
       // Firestore'a doğrudan yeni kayıt ekle
       await FirebaseFirestore.instance.collection('moods').add({
         'userId': user.uid,
@@ -527,17 +550,28 @@ class _HomePageState extends State<HomePage> {
                     ),
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
                       child: Row(
                         children: [
-                          _buildMoodIcon(Colors.greenAccent[400]!, "😍"),
-                          const SizedBox(width: 15),
-                          _buildMoodIcon(Colors.lightBlue[300]!, "🙂"),
-                          const SizedBox(width: 15),
-                          _buildMoodIcon(Colors.orange, "😞"),
-                          const SizedBox(width: 15),
-                          _buildMoodIcon(Colors.redAccent[400]!, "😡"),
-                          const SizedBox(width: 15),
-                          _buildMoodIcon(const Color(0xFF0F111A), "💤"),
+                          _buildMoodIcon(const Color(0xFF4CAF50), "😍"), // 10.0
+                          const SizedBox(width: 12),
+                          _buildMoodIcon(const Color(0xFF8BC34A), "🤩"), // 9.0
+                          const SizedBox(width: 12),
+                          _buildMoodIcon(const Color(0xFF2196F3), "🙂"), // 8.0
+                          const SizedBox(width: 12),
+                          _buildMoodIcon(const Color(0xFF81D4FA), "😊"), // 7.0
+                          const SizedBox(width: 12),
+                          _buildMoodIcon(const Color(0xFFFFCC80), "😞"), // 6.0
+                          const SizedBox(width: 12),
+                          _buildMoodIcon(const Color(0xFFCFD8DC), "🤔"), // 5.0
+                          const SizedBox(width: 12),
+                          _buildMoodIcon(const Color(0xFFFF9800), "😡"), // 4.0
+                          const SizedBox(width: 12),
+                          _buildMoodIcon(const Color(0xFFEF9A9A), "😟"), // 3.0
+                          const SizedBox(width: 12),
+                          _buildMoodIcon(const Color(0xFFB0BEC5), "💤"), // 2.0
+                          const SizedBox(width: 12),
+                          _buildMoodIcon(const Color(0xFFF44336), "😰"), // 1.0
                         ],
                       ),
                     ),

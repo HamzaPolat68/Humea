@@ -36,11 +36,16 @@ class _MoodChartPageState extends State<MoodChartPage> {
   int _selectedPeriod = 0; // 0: Hafta, 1: Ay, 2: Tüm Zamanlar
 
   final Map<int, String> _scoreToEmoji = {
-    5: "😍",
-    4: "🙂",
-    3: "😞",
-    2: "😡",
-    1: "💤",
+    10: "😍 Harika", // Harika
+    9: "🤩 Heyecanlı", // Heyecanlı
+    8: "🙂 İyi", // İyi
+    7: "😊 Huzurlu", // Huzurlu
+    6: "😞 Hüzünlü", // Hüzünlü
+    5: "🤔 Düşünceli", // Düşünceli
+    4: "😡 Öfkeli", // Öfkeli
+    3: "😟 Endişeli", // Endişeli
+    2: "💤 Yorgun", // Yorgun
+    1: "😰 Çok Kaygılı", // Çok Kaygılı
   };
 
   @override
@@ -114,8 +119,8 @@ class _MoodChartPageState extends State<MoodChartPage> {
                   child: _buildSummaryCard(
                     "Ortalama Skor",
                     currentRawScores.isEmpty
-                        ? "-/5.0"
-                        : "${avgScore.toStringAsFixed(1)}/5.0",
+                        ? "-/10.0"
+                        : "${avgScore.toStringAsFixed(1)}/10.0",
                     trailing: const Icon(
                       Icons.insights,
                       color: Colors.amber,
@@ -129,7 +134,8 @@ class _MoodChartPageState extends State<MoodChartPage> {
                     "En Sık Duygu",
                     currentRawScores.isEmpty
                         ? "-"
-                        : _scoreToText(_findModeOfList(currentRawScores)),
+                        : _scoreToEmoji[_findModeOfList(currentRawScores)] ??
+                              "-",
                   ),
                 ),
               ],
@@ -235,8 +241,8 @@ class _MoodChartPageState extends State<MoodChartPage> {
       borderData: FlBorderData(show: false),
       minX: 0,
       maxX: _selectedPeriod == 0 ? 6 : (_selectedPeriod == 1 ? 3 : 11),
-      minY: 0.5,
-      maxY: 5.5,
+      minY: 0,
+      maxY: 11,
       lineBarsData: [
         LineChartBarData(
           spots: spots,
@@ -255,18 +261,41 @@ class _MoodChartPageState extends State<MoodChartPage> {
   }
 
   int _findModeOfList(List<int> scores) {
-    final freq = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0};
-    for (int s in scores) freq[s.clamp(1, 5)] = freq[s.clamp(1, 5)]! + 1;
+    // 1'den 10'a kadar tüm frekansları oluştur
+    final freq = {for (var i = 1; i <= 10; i++) i: 0};
+
+    for (int s in scores) {
+      // 1-10 dışındaki verileri güvenli hale getir
+      int validScore = s.clamp(1, 10);
+      freq[validScore] = freq[validScore]! + 1;
+    }
+
+    // En yüksek frekansa sahip anahtarı (skoru) bul
     return freq.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
   }
 
-  String _scoreToText(int score) => [
-    "💤 Yorgun",
-    "😡 Sinirli",
-    "😞 Hüzünlü",
-    "🙂 İyi",
-    "😍 Harika",
-  ][score - 1];
+  String _scoreToText(int score) {
+    // 1-10 arası değerleri haritalayan liste
+    final List<String> descriptions = [
+      "1: Çok Kaygılı 😰",
+      "2: Yorgun 💤",
+      "3: Endişeli 😟",
+      "4: Öfkeli 😡",
+      "5: Düşünceli 🤔",
+      "6: Hüzünlü 😞",
+      "7: Huzurlu 😊",
+      "8: İyi 🙂",
+      "9: Heyecanlı 🤩",
+      "10: Harika 😍",
+    ];
+
+    // Skalayı korumak için güvenli erişim:
+    // Eğer skor 1-10 arasındaysa listeden al, değilse varsayılan değer döndür.
+    if (score >= 1 && score <= 10) {
+      return descriptions[score - 1];
+    }
+    return "Normal 🙂"; // Hatalı bir skor gelirse (örneğin 0 veya 11)
+  }
 
   Widget _bottomTitleWidgets(double value, TitleMeta meta) {
     int index = value.toInt();
@@ -356,37 +385,39 @@ class _EmojiDotPainter extends FlDotPainter with EquatableMixin {
 
   @override
   void draw(Canvas canvas, FlSpot spot, Offset offset) {
-    String emoji = "🙂";
-    switch (score.clamp(1, 5)) {
-      case 5:
-        emoji = "😍";
-        break;
-      case 4:
-        emoji = "🙂";
-        break;
-      case 3:
-        emoji = "😞";
-        break;
-      case 2:
-        emoji = "😡";
-        break;
-      case 1:
-        emoji = "💤";
-        break;
-    }
+    // Skor değerini garanti altına alalım
+    int clampedScore = score.clamp(1, 10);
+
+    final Map<int, String> emojiMap = {
+      10: "😍",
+      9: "🤩",
+      8: "🙂",
+      7: "😊",
+      6: "😞",
+      5: "🤔",
+      4: "😡",
+      3: "😟",
+      2: "💤",
+      1: "😰",
+    };
 
     final textPainter = TextPainter(
-      text: TextSpan(text: emoji, style: const TextStyle(fontSize: 22)),
+      text: TextSpan(
+        text: emojiMap[clampedScore] ?? "🙂",
+        style: const TextStyle(fontSize: 20),
+      ),
       textDirection: TextDirection.ltr,
     );
     textPainter.layout();
+
+    // Emojiyi tam noktanın üzerine ortala
     final double xCenter = offset.dx - (textPainter.width / 2);
-    final double yCenter = offset.dy - (textPainter.height / 1.1);
+    final double yCenter = offset.dy - (textPainter.height / 2);
     textPainter.paint(canvas, Offset(xCenter, yCenter));
   }
 
   @override
-  Size getSize(FlSpot spot) => const Size(32, 32);
+  Size getSize(FlSpot spot) => const Size(20, 20);
 
   @override
   Color get mainColor => Colors.transparent;

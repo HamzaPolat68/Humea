@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Post {
   final String id;
-  final String userId; // Firebase'deki döküman ID'sini tutmak için şart
+  final String userId;
   final String userName;
   final String userImage;
   final String moodEmoji;
@@ -10,10 +10,12 @@ class Post {
   final String note;
   final DateTime timestamp;
   final int likes;
+  final int commentsCount; // Yeni: Yorum sayısı
+  final List<Map<String, dynamic>> likesList; // Yeni: Beğenenlerin ID listesi
 
   Post({
     required this.id,
-    required this.userId, // ID artık zorunlu
+    required this.userId,
     required this.userName,
     required this.userImage,
     required this.moodEmoji,
@@ -21,30 +23,56 @@ class Post {
     required this.note,
     required this.timestamp,
     required this.likes,
+    required this.commentsCount,
+    required this.likesList,
   });
 
-  // Buluttan (Firebase) gelen veriyi bizim Post modeline çevirir
   factory Post.fromFirestore(Map<String, dynamic> json) {
     return Post(
       id: json['id'] ?? '',
-      userId:
-          json['userId'] ??
-          '', // FeedPage'de eşlediğimiz döküman ID'sini alıyor
+      userId: json['userId'] ?? '',
       userName: json['userName'] ?? 'Anonim',
       userImage: json['userImage'] ?? 'https://via.placeholder.com/150',
       moodEmoji: json['moodEmoji'] ?? '🙂',
       moodTitle: json['moodTitle'] ?? 'Normal',
       note: json['note'] ?? '',
-      // Eğer Firebase'de henüz likes alanı yoksa varsayılan olarak 0 kabul et
       likes: json['likes'] ?? 0,
-      // Firebase'in özel Timestamp tipini DateTime'a çeviriyoruz
-      timestamp: json['timestamp'] != null
-          ? (json['timestamp'] as Timestamp).toDate()
-          : DateTime.now(),
+      commentsCount: json['commentsCount'] ?? 0, // Yeni: Yorum sayısı
+      // Firebase'den gelen listeyi al, eğer yoksa boş liste döndür
+      likesList: List<Map<String, dynamic>>.from(json['likesList'] ?? []),
+      timestamp: _parseTimestamp(json['timestamp']),
     );
   }
 
-  // Bizim Post modelini Firebase'in anlayacağı Map formatına çevirir
+  static DateTime _parseTimestamp(dynamic ts) {
+    if (ts == null) return DateTime.now();
+    // If it's a Firestore Timestamp
+    if (ts is Timestamp) return ts.toDate();
+    // If it's already a DateTime
+    if (ts is DateTime) return ts;
+    // If it's milliseconds since epoch
+    if (ts is int) return DateTime.fromMillisecondsSinceEpoch(ts);
+    // If it's a map with seconds/nanoseconds (possible when decoding JSON)
+    if (ts is Map<String, dynamic>) {
+      if (ts.containsKey('_seconds')) {
+        final seconds = ts['_seconds'] as int? ?? 0;
+        final nanos = ts['_nanoseconds'] as int? ?? 0;
+        return DateTime.fromMillisecondsSinceEpoch(
+          seconds * 1000 + (nanos / 1000000).round(),
+        );
+      }
+      if (ts.containsKey('seconds')) {
+        final seconds = ts['seconds'] as int? ?? 0;
+        final nanos = ts['nanoseconds'] as int? ?? 0;
+        return DateTime.fromMillisecondsSinceEpoch(
+          seconds * 1000 + (nanos / 1000000).round(),
+        );
+      }
+    }
+    // Fallback
+    return DateTime.now();
+  }
+
   Map<String, dynamic> toFirestore() => {
     'userId': userId,
     'userName': userName,
@@ -53,6 +81,7 @@ class Post {
     'moodTitle': moodTitle,
     'note': note,
     'likes': likes,
-    'timestamp': FieldValue.serverTimestamp(), // Sunucu saatini baz alır
+    'likesList': likesList, // Firestore'a kaydederken ekle
+    'timestamp': FieldValue.serverTimestamp(),
   };
 }
