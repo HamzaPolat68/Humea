@@ -46,15 +46,15 @@ class _ProfilePageState extends State<ProfilePage> {
     if (_user == null) return;
 
     // Profil resmini Firebase Auth profilinden alıyoruz
-    if (_user!.photoURL != null && _user!.photoURL!.isNotEmpty) {
-      _profileImageUrl = _user!.photoURL!;
+    if (_user.photoURL != null && _user.photoURL!.isNotEmpty) {
+      _profileImageUrl = _user.photoURL!;
     }
 
     try {
       // 1. ADIM: Duygu verilerini doğrudan Firestore'dan çek
       final moodSnapshot = await FirebaseFirestore.instance
           .collection('moods')
-          .where('userId', isEqualTo: _user!.uid)
+          .where('userId', isEqualTo: _user.uid)
           .get();
 
       final moodDocs = moodSnapshot.docs;
@@ -87,7 +87,7 @@ class _ProfilePageState extends State<ProfilePage> {
           .collection('posts')
           .where(
             'userId',
-            isEqualTo: _user!.uid,
+            isEqualTo: _user.uid,
           ) // userName yerine userId kullanmak daha güvenlidir
           .get();
 
@@ -416,7 +416,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         child: StreamBuilder<QuerySnapshot>(
                           stream: FirebaseFirestore.instance
                               .collection('posts')
-                              .where('userId', isEqualTo: _user!.uid)
+                              .where('userId', isEqualTo: _user.uid)
                               .snapshots(),
                           builder: (context, snapshot) {
                             int count = snapshot.hasData

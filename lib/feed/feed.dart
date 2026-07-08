@@ -62,16 +62,14 @@ class _FeedPageState extends State<FeedPage> {
 
     final docRef = FirebaseFirestore.instance.collection('posts').doc(post.id);
 
-    // 1. Durumu yerelde (UI'da) hemen değiştiriyoruz (setState ile)
-    final currentState = isPostLikedByMe; // Tıklamadan önceki durumu tut
-    setState(() {
-      isPostLikedByMe = !isPostLikedByMe;
-    });
+    // HER SEFERİNDE GÜNCEL LİSTEYE BAKARAK KONTROL ET
+    final bool isCurrentlyLiked = post.likesList.any(
+      (like) => like['userId'] == user.uid,
+    );
 
     try {
-      // 2. Firestore işlemleri
-      if (currentState) {
-        // Zaten beğenmişiz, şimdi "beğeniyi geri çekiyoruz"
+      if (isCurrentlyLiked) {
+        // Beğeniyi kaldır
         await docRef.update({
           'likes': FieldValue.increment(-1),
           'likesList': FieldValue.arrayRemove([
@@ -83,7 +81,7 @@ class _FeedPageState extends State<FeedPage> {
           ]),
         });
       } else {
-        // Beğenmemişiz, şimdi "beğeniyoruz"
+        // Beğeniyi ekle
         await docRef.update({
           'likes': FieldValue.increment(1),
           'likesList': FieldValue.arrayUnion([
@@ -95,6 +93,7 @@ class _FeedPageState extends State<FeedPage> {
           ]),
         });
 
+        // Bildirim kısmı...
         if (post.userId != user.uid) {
           await FirebaseFirestore.instance.collection('notifications').add({
             'recipientId': post.userId,
@@ -107,10 +106,6 @@ class _FeedPageState extends State<FeedPage> {
         }
       }
     } catch (e) {
-      // Hata olursa durumu geri al
-      setState(() {
-        isPostLikedByMe = currentState;
-      });
       debugPrint("Beğeni hatası: $e");
     }
   }
@@ -289,7 +284,11 @@ class _FeedPageState extends State<FeedPage> {
             physics: const BouncingScrollPhysics(),
             itemCount: bulutPostlari.length,
             itemBuilder: (context, index) {
-              return _buildPostCard(bulutPostlari[index]);
+              final post = bulutPostlari[index];
+              return _buildPostCard(
+                post,
+                key: ValueKey(post.id),
+              ); // ValueKey ekledik
             },
           ),
         );
@@ -297,7 +296,7 @@ class _FeedPageState extends State<FeedPage> {
     );
   }
 
-  Widget _buildPostCard(Post post) {
+  Widget _buildPostCard(Post post, {Key? key}) {
     final String? currentUserId = FirebaseAuth.instance.currentUser?.uid;
     final bool isPostLikedByMe =
         currentUserId != null &&
@@ -310,6 +309,7 @@ class _FeedPageState extends State<FeedPage> {
     );
 
     return Container(
+      key: key,
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: const Color.fromARGB(255, 236, 234, 234),

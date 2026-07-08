@@ -127,7 +127,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _updateStatsInFirebase(String userId, {double? newScore}) async {
+  Future<void> _updateStatsInFirebase(String userId) async {
     try {
       // 1. Veri kontrolü
       if (_allMoodEntries.isEmpty) {
@@ -371,21 +371,24 @@ class _HomePageState extends State<HomePage> {
 
   String get _currentPeriodLabel {
     if (_selectedIndex != 2) return "";
-    if (_currentChartPeriod == 0)
+    if (_currentChartPeriod == 0) {
       return _weeksAgo == 0
           ? "Bu Hafta"
           : (_weeksAgo == 1 ? "Geçen Hafta" : "$_weeksAgo Hafta Önce");
-    if (_currentChartPeriod == 1)
+    }
+    if (_currentChartPeriod == 1) {
       return _monthsAgo == 0
           ? "Bu Ay"
           : (_monthsAgo == 1 ? "Geçen Ay" : "$_monthsAgo Ay Önce");
+    }
     return "Tüm Zamanlar (2026)";
   }
 
   String _getHomeProfileImage() {
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null && user.photoURL != null && user.photoURL!.isNotEmpty)
+    if (user != null && user.photoURL != null && user.photoURL!.isNotEmpty) {
       return user.photoURL!;
+    }
     return 'https://via.placeholder.com/150';
   }
 
@@ -404,8 +407,9 @@ class _HomePageState extends State<HomePage> {
 
   ImageProvider _resolveProfileImageProvider() {
     final String imagePath = _getHomeProfileImage();
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://'))
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
       return NetworkImage(imagePath);
+    }
     return FileImage(File(imagePath));
   }
 
@@ -435,14 +439,14 @@ class _HomePageState extends State<HomePage> {
             onPeriodTabChanged: (i) => setState(() => _currentChartPeriod = i),
             onPeriodChanged: (direction) => setState(() {
               if (_currentChartPeriod == 0) {
-                if (direction == -1)
+                if (direction == -1) {
                   _weeksAgo++;
-                else if (direction == 1 && _weeksAgo > 0)
+                } else if (direction == 1 && _weeksAgo > 0)
                   _weeksAgo--;
               } else if (_currentChartPeriod == 1) {
-                if (direction == -1)
+                if (direction == -1) {
                   _monthsAgo++;
-                else if (direction == 1 && _monthsAgo > 0)
+                } else if (direction == 1 && _monthsAgo > 0)
                   _monthsAgo--;
               }
             }),
@@ -512,7 +516,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     onPressed: () async {
                       await FirebaseAuth.instance.signOut();
-                      if (mounted)
+                      if (mounted) {
                         Navigator.pushAndRemoveUntil(
                           context,
                           MaterialPageRoute(
@@ -520,6 +524,7 @@ class _HomePageState extends State<HomePage> {
                           ),
                           (route) => false,
                         );
+                      }
                     },
                   ),
                 ],
@@ -602,7 +607,7 @@ class _HomePageState extends State<HomePage> {
                       child: MaterialButton(
                         onPressed: () async {
                           bool isSaved = await _saveTodayMood(_selectedEmoji);
-                          if (isSaved)
+                          if (isSaved) {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -612,6 +617,7 @@ class _HomePageState extends State<HomePage> {
                                 ),
                               ),
                             );
+                          }
                         },
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(30),
