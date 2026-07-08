@@ -46,3 +46,8 @@ app.*.map.json
 
 # Env file
 .env
+
+# iOS build artifacts
+ios/Pods/
+ios/.symlinks/
+ios/Podfile.lock
