@@ -37,6 +37,13 @@
             {
               "client_id": "885686922988-u4g39no20kmdtreri7kn1akmbu5fdb61.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "885686922988-9ghv15k6bvuth3hcql8vg7ei9qj12r46.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.hp.humea"
+              }
             }
           ]
         }
