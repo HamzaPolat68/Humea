@@ -1,9 +1,16 @@
-# Uncomment this line to define a global platform for your project
-platform :ios, '15.0'
+platform :ios, '15.0' # Projenizdeki minimum iOS sürümüne göre güncelleyin
 
 target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
-  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  load File.join(File.dirname(File.realpath(__FILE__)), '.flutter-plugins')
+  # Flutter'ın podhelper dosyasını doğru yerden çağırmasını sağlayın
+ 
+  flutter_ios_podfile_setup = File.join(File.dirname(File.realpath(__FILE__)), '..', '.symlinks', 'plugins', 'ios', 'podhelper.rb')
+  
+  if File.exist?(flutter_ios_podfile_setup)
+    load flutter_ios_podfile_setup
+    flutter_install_all_ios_pods
+  end
 end
