@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io'; // Cihaz içi dosyaları (File) okumak için eklendi
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';

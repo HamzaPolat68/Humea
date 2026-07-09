@@ -4,47 +4,18 @@ import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
-/// Default [FirebaseOptions] for use with your Firebase apps.
-///
-/// Example:
-/// ```dart
-/// import 'firebase_options.dart';
-/// // ...
-/// await Firebase.initializeApp(
-///   options: DefaultFirebaseOptions.currentPlatform,
-/// );
-/// ```
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
       throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
+        'DefaultFirebaseOptions have not been configured for web.',
       );
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return android;
       case TargetPlatform.iOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for ios - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
-      case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
-      case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
-      case TargetPlatform.linux:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for linux - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return ios; // Hata veren yer düzeltildi
       default:
         throw UnsupportedError(
           'DefaultFirebaseOptions are not supported for this platform.',
@@ -58,5 +29,16 @@ class DefaultFirebaseOptions {
     messagingSenderId: '885686922988',
     projectId: 'humea-a92e9',
     storageBucket: 'humea-a92e9.firebasestorage.app',
+  );
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey:
+        'AIzaSyCKBwGA_Ouf25zBESglyrcSeluWTmi9_mI', // GoogleService-Info.plist dosyanızdaki API_KEY
+    appId:
+        '1:885686922988:ios:cbe662337710071dc77fc9', // GoogleService-Info.plist'teki GOOGLE_APP_ID
+    messagingSenderId: '885686922988',
+    projectId: 'humea-a92e9',
+    storageBucket: 'humea-a92e9.firebasestorage.app',
+    iosBundleId: 'com.hp.humea',
   );
 }
