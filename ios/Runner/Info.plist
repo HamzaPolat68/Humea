@@ -22,7 +22,8 @@
     <string>$(FLUTTER_BUILD_NAME)</string>
     <key>CFBundleVersion</key>
     <string>$(FLUTTER_BUILD_NUMBER)</string>
-    
+
+    <!-- Google Sign-In URL Scheme -->
     <key>CFBundleURLTypes</key>
     <array>
         <dict>
@@ -35,13 +36,25 @@
         </dict>
     </array>
 
+    <!-- Google Sign-In Client ID -->
+    <key>GIDClientID</key>
+    <string>885686922988-9ghv15k6bvuth3hcql8vg7ei9qj12r46.apps.googleusercontent.com</string>
+
     <key>LSRequiresIPhoneOS</key>
     <true/>
+
+    <!-- Push Notification Background Mode -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>remote-notification</string>
+    </array>
+
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>
         <false/>
     </dict>
+
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
     <key>UILaunchStoryboardName</key>
