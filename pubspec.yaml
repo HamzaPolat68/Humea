@@ -1,11 +1,8 @@
 name: humea
 description: "A new Flutter project."
 publish_to: 'none'
-<<<<<<< HEAD
-version: 1.0.0+8
-=======
 version: 1.0.0+9
->>>>>>> 96774d9 (Google_Services_info.plist dosyası düzeltildi)
+
 
 environment:
   sdk: ^3.8.1
