@@ -113,7 +113,7 @@ class _LoginPageState extends State<LoginPage> {
         height: double.infinity,
         decoration: const BoxDecoration(
           image: DecorationImage(
-            image: AssetImage("assets/arka_plan.jpg"),
+            image: AssetImage("assets/arka_plan.png"),
             fit: BoxFit.cover,
           ),
         ),

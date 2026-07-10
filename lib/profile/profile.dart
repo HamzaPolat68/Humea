@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:image_picker/image_picker.dart';
 import 'package:humea/features/auth/login_page.dart';
+import 'package:humea/profile/edit_profile_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -61,11 +62,16 @@ class _ProfilePageState extends State<ProfilePage> {
 
       // Emojileri skorlara göre eşleştir
       final Map<double, String> scoreToEmoji = {
-        5.0: "😍",
-        4.0: "🙂",
-        3.0: "😞",
-        2.0: "😡",
-        1.0: "💤",
+        10.0: "😍", // Harika
+        9.0: "🤩", // Heyecanlı
+        8.0: "🙂", // İyi/Mutlu
+        7.0: "😊", // Huzurlu/Pozitif
+        6.0: "😞", // Hüzünlü
+        5.0: "🤔", // Nötr/Düşünceli
+        4.0: "😡", // Öfkeli
+        3.0: "😟", // Endişeli
+        2.0: "💤", // Yorgun
+        1.0: "😰",
       };
 
       Map<String, int> emojiCounts = {};
@@ -382,6 +388,25 @@ class _ProfilePageState extends State<ProfilePage> {
                           style: const TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const EditProfilePage(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.edit,
+                            size: 16,
+                            color: Colors.blue,
+                          ),
+                          label: const Text(
+                            "Profili Düzenle",
+                            style: TextStyle(fontSize: 14, color: Colors.blue),
                           ),
                         ),
                       ],

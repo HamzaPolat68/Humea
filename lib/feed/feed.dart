@@ -110,6 +110,44 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
+  Future<void> _editPost(Post post) async {
+    final TextEditingController editController = TextEditingController(
+      text: post.note,
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Paylaşımı Düzenle"),
+        content: TextField(
+          controller: editController,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            hintText: "Yeni düşüncelerinizi yazın...",
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("İptal"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (editController.text.trim().isNotEmpty) {
+                await FirebaseFirestore.instance
+                    .collection('posts')
+                    .doc(post.id)
+                    .update({'note': editController.text.trim()});
+                if (mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text("Kaydet"),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _deletePostAndMood(String docId, DateTime postDate) async {
     try {
       final firestore = FirebaseFirestore.instance;
@@ -198,6 +236,48 @@ class _FeedPageState extends State<FeedPage> {
     } catch (e) {
       debugPrint("Silme hatası: $e");
     }
+  }
+
+  Future<void> _editComment(
+    String postId,
+    String commentId,
+    String currentText,
+  ) async {
+    final TextEditingController editController = TextEditingController(
+      text: currentText,
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Yorumu Düzenle"),
+        content: TextField(
+          controller: editController,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: "Yeni yorumunuzu girin"),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("İptal"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (editController.text.trim().isNotEmpty) {
+                await FirebaseFirestore.instance
+                    .collection('posts')
+                    .doc(postId)
+                    .collection('comments')
+                    .doc(commentId)
+                    .update({'text': editController.text.trim()});
+                if (mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text("Kaydet"),
+          ),
+        ],
+      ),
+    );
   }
 
   // TARİH FORMATLAMA FONKSİYONU (Paketsiz Türkçe Format)
@@ -311,6 +391,7 @@ class _FeedPageState extends State<FeedPage> {
     return Container(
       key: key,
       margin: const EdgeInsets.only(bottom: 20),
+
       decoration: BoxDecoration(
         color: const Color.fromARGB(255, 236, 234, 234),
         borderRadius: BorderRadius.circular(24), // Daha yuvarlak köşeler
@@ -353,30 +434,57 @@ class _FeedPageState extends State<FeedPage> {
                 ),
               ),
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    post.userName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      post.userName,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
-                  ),
-                  Text(
-                    _formatDate(post.timestamp),
-                    style: TextStyle(fontSize: 11, color: Colors.grey[400]),
-                  ),
-                ],
+                    Text(
+                      _formatDate(post.timestamp),
+                      style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
+
+              // 3. Butonlar (SABİT GENİŞLİKLİ - Taşmayı tamamen engeller)
               if (isMyPost)
-                IconButton(
-                  onPressed: () => _deletePostAndMood(post.id, post.timestamp),
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    color: Color.fromARGB(255, 242, 53, 6),
-                  ),
+                Row(
+                  mainAxisSize:
+                      MainAxisSize.min, // Sadece butonlar kadar yer kapla
+                  children: [
+                    IconButton(
+                      padding: EdgeInsets.all(
+                        4,
+                      ), // Çok küçük bir padding verelim
+                      constraints:
+                          const BoxConstraints(), // Padding dışı alanı sıfırla
+                      onPressed: () => _editPost(post),
+                      icon: const Icon(
+                        Icons.edit_note,
+                        color: Colors.blue,
+                        size: 24,
+                      ),
+                    ),
+                    IconButton(
+                      padding: EdgeInsets.all(4),
+                      constraints: const BoxConstraints(),
+                      onPressed: () =>
+                          _deletePostAndMood(post.id, post.timestamp),
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.red,
+                        size: 24,
+                      ),
+                    ),
+                  ],
                 ),
             ],
           ),
@@ -560,16 +668,28 @@ class _FeedPageState extends State<FeedPage> {
                                                   if (isMyComment)
                                                     IconButton(
                                                       icon: const Icon(
-                                                        Icons.delete_outline,
-
-                                                        color: Colors.red,
+                                                        Icons.edit_outlined,
+                                                        color: Colors.blue,
                                                       ),
                                                       onPressed: () =>
-                                                          _deleteComment(
+                                                          _editComment(
                                                             post.id,
                                                             doc.id,
+                                                            doc['text'] ?? "",
                                                           ),
                                                     ),
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                      Icons.delete_outline,
+
+                                                      color: Colors.red,
+                                                    ),
+                                                    onPressed: () =>
+                                                        _deleteComment(
+                                                          post.id,
+                                                          doc.id,
+                                                        ),
+                                                  ),
                                                 ],
                                               ),
                                             );

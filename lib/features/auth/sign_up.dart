@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:humea/features/auth/login_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -13,6 +14,7 @@ class SignUpPage extends StatefulWidget {
 class _SignUpPageState extends State<SignUpPage> {
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
+
   // 1. Verileri almak için Controller'ları tanımlıyoruz
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -20,15 +22,35 @@ class _SignUpPageState extends State<SignUpPage> {
   final TextEditingController _confirmPasswordController =
       TextEditingController();
 
+  DateTime? _pickedDate;
+  Future<void> _pickDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(
+        2000,
+      ), // Kullanıcı takvimi açtığında varsayılan tarih
+      firstDate: DateTime(1950), // Seçilebilecek en eski tarih
+      lastDate: DateTime.now(), // Seçilebilecek en son tarih
+    );
+    if (picked != null && picked != _pickedDate) {
+      setState(() {
+        _pickedDate = picked;
+      });
+    }
+  }
+
   // 2. Firebase Kayıt Fonksiyonu
   Future<void> _registerUser() async {
     final String email = _emailController.text.trim();
     final String password = _passwordController.text.trim();
     final String confirmPassword = _confirmPasswordController.text.trim();
 
-    // Basit kontroller
-    if (email.isEmpty || password.isEmpty || _nameController.text.isEmpty) {
-      _showMessage("Lütfen tüm alanları doldurun.", Colors.redAccent);
+    // Basit kontroller: _pickedDate değişkenini kontrol ediyoruz
+    if (email.isEmpty ||
+        password.isEmpty ||
+        _nameController.text.isEmpty ||
+        _pickedDate == null) {
+      _showMessage("Lütfen tüm alanları doldurun ", Colors.redAccent);
       return;
     }
 
@@ -45,14 +67,21 @@ class _SignUpPageState extends State<SignUpPage> {
       // Kullanıcının adını profiline ekliyoruz
       await userCredential.user?.updateDisplayName(_nameController.text);
 
-      //  Başarılı kayıt sonrası LoginPage'e verileri aktararak yönlendiriyoruz
-      if (mounted) {
-        _showMessage(
-          "Hesap başarıyla oluşturuldu! Giriş yapabilirsiniz. ✨",
-          Colors.green,
-        );
+      // Firestore'a verileri kaydediyoruz
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .set({
+            'uid': userCredential.user!.uid,
+            'name': _nameController.text,
+            'email': email,
+            'birthDate': _pickedDate!
+                .toIso8601String(), // _pickedDate kullanıldı
+            'createdAt': FieldValue.serverTimestamp(),
+          });
 
-        // Sayfayı pop etmek yerine, verilerle birlikte LoginPage'e kökten geçiş yapıyoruz
+      if (mounted) {
+        _showMessage("Hesap başarıyla oluşturuldu! ✨", Colors.green);
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -153,7 +182,7 @@ class _SignUpPageState extends State<SignUpPage> {
                 FadeInUp(
                   child: Container(
                     margin: const EdgeInsets.symmetric(horizontal: 10),
-                    padding: const EdgeInsets.all(25),
+                    padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(
                         0.6,
@@ -179,9 +208,66 @@ class _SignUpPageState extends State<SignUpPage> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 10),
                         _buildTextField("Adınız ve Soyadınız", _nameController),
                         const SizedBox(height: 15),
+                        InkWell(
+                          onTap: () async {
+                            DateTime? picked = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime(
+                                2011,
+                              ), // Kullanıcı kolaylığı için varsayılan yıl
+                              firstDate: DateTime(1950),
+                              lastDate: DateTime.now(),
+                            );
+                            if (picked != null) {
+                              setState(() {
+                                _pickedDate =
+                                    picked; // Değişken adını _pickedDate olarak güncelledik
+                              });
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 15,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(15),
+                              boxShadow: [
+                                // Diğer alanlarla uyumlu olması için shadow eklendi
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.05),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.calendar_today,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  _pickedDate == null
+                                      ? "Doğum Tarihi Seçin"
+                                      : "${_pickedDate!.day}.${_pickedDate!.month}.${_pickedDate!.year}",
+                                  style: TextStyle(
+                                    color: _pickedDate == null
+                                        ? Colors.grey
+                                        : Colors.black,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
                         _buildTextField("E-posta", _emailController),
                         const SizedBox(height: 15),
                         _buildTextField(
@@ -200,7 +286,7 @@ class _SignUpPageState extends State<SignUpPage> {
                         // Hesap Oluştur Butonu
                         _buildGradientButton("Hesap Oluştur", _registerUser),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 3),
 
                         // Zaten Hesabınız Var mı?
                         Column(
