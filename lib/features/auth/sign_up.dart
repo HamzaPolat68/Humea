@@ -74,6 +74,7 @@ class _SignUpPageState extends State<SignUpPage> {
           .set({
             'uid': userCredential.user!.uid,
             'name': _nameController.text,
+            'searchName': _nameController.text.trim().toLowerCase(),
             'email': email,
             'birthDate': _pickedDate!
                 .toIso8601String(), // _pickedDate kullanıldı

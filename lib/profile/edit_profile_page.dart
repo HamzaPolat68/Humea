@@ -194,13 +194,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   child: Column(
                     children: [
                       _buildTextField(
-                        "Eski Şifre",
-                        _oldPasswordController,
-                        Icons.lock,
-                        obscure: true,
-                      ),
-                      const SizedBox(height: 10),
-                      _buildTextField(
                         "Yeni Şifre",
                         _newPasswordController,
                         Icons.vpn_key,

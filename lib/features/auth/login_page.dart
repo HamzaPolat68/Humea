@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:humea/features/auth/sign_up.dart';
@@ -52,10 +53,39 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _login() async {
-    await FirebaseAuth.instance.signInWithEmailAndPassword(
-      email: _emailController.text.trim(),
-      password: _passwordController.text.trim(),
-    );
+    // 1. Firebase Auth ile giriş yapılıyor
+    UserCredential userCredential = await FirebaseAuth.instance
+        .signInWithEmailAndPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+
+    // ==================== ESKİ KULLANICI KONTROLÜ VE EKLEME ====================
+    User? user = userCredential.user;
+    if (user != null) {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (!userDoc.exists) {
+        String calculatedName =
+            user.displayName ?? _emailController.text.trim().split('@').first;
+
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'uid': user.uid,
+          'userImageUrl': user.photoURL ?? '',
+          'name': calculatedName,
+          'searchName': calculatedName
+              .toLowerCase(), // Arama için küçük harf indeks
+          'email': user.email,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        print("Eski kullanıcının eksik Firestore kaydı başarıyla oluşturuldu.");
+      }
+    }
+    // ===========================================================================
+
     if (mounted) _navigateToHome();
   }
 
@@ -76,7 +106,39 @@ class _LoginPageState extends State<LoginPage> {
         accessToken: googleAuth.accessToken as String?,
       );
 
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      // Google ile Firebase Auth girişi yapılıyor
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithCredential(credential);
+
+      // ==================== GOOGLE İÇİN ESKİ KULLANICI KONTROLÜ ====================
+      User? user = userCredential.user;
+      if (user != null) {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+        if (!userDoc.exists) {
+          String calculatedName =
+              user.displayName ?? user.email!.split('@').first;
+
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .set({
+                'uid': user.uid,
+                'name': calculatedName,
+                'searchName': calculatedName
+                    .toLowerCase(), // Arama için küçük harf indeks
+                'email': user.email,
+                'createdAt': FieldValue.serverTimestamp(),
+              });
+          print(
+            "Google ile giren eski kullanıcının eksik Firestore kaydı oluşturuldu.",
+          );
+        }
+      }
+      // =============================================================================
 
       _showMessage("Google ile başarıyla giriş yapıldı! 🎉", Colors.green);
       _navigateToHome();

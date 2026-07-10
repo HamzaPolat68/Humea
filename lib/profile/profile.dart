@@ -45,13 +45,36 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _loadProfileData() async {
     if (_user == null) return;
 
-    // Profil resmini Firebase Auth profilinden alıyoruz
-    if (_user.photoURL != null && _user.photoURL!.isNotEmpty) {
-      _profileImageUrl = _user.photoURL!;
-    }
-
     try {
-      // 1. ADIM: Duygu verilerini doğrudan Firestore'dan çek
+      // 1. ADIM: Firestore 'users' koleksiyonundan kullanıcının güncel profil resmini çek
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_user.uid)
+          .get();
+
+      String? firestoreImageUrl;
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>;
+        // Senin belirttiğin 'userImageUrl' alanına bakıyoruz
+        firestoreImageUrl = userData['userImageUrl'] ?? userData['photoURL'];
+      }
+
+      // Eğer Firestore'da varsa onu kullan, yoksa Firebase Auth profilindeki resme (yedek) bak
+      if (firestoreImageUrl != null && firestoreImageUrl.isNotEmpty) {
+        _profileImageUrl = firestoreImageUrl;
+      } else if (_user.photoURL != null && _user.photoURL!.isNotEmpty) {
+        _profileImageUrl = _user.photoURL!;
+
+        // EĞER FİRESTORE'DA YOKSA: Arama sayfasında da görünebilmesi için
+        // Firestore dokümanını otomatik olarak mevcut fotoğrafla besle (Geriye dönük koruma)
+        await FirebaseFirestore.instance.collection('users').doc(_user.uid).set({
+          'userImageUrl': _user.photoURL,
+          'photoURL': _user
+              .photoURL, // Arama sayfasının patlamaması için ikisini de yazıyoruz
+        }, SetOptions(merge: true));
+      }
+
+      // 2. ADIM: Duygu verilerini Firestore'dan çek
       final moodSnapshot = await FirebaseFirestore.instance
           .collection('moods')
           .where('userId', isEqualTo: _user.uid)
@@ -71,7 +94,7 @@ class _ProfilePageState extends State<ProfilePage> {
         4.0: "😡", // Öfkeli
         3.0: "😟", // Endişeli
         2.0: "💤", // Yorgun
-        1.0: "😰",
+        1.0: "😰", // Çok Kaygılı
       };
 
       Map<String, int> emojiCounts = {};
@@ -87,18 +110,15 @@ class _ProfilePageState extends State<ProfilePage> {
           ? emojiCounts.entries.reduce((a, b) => a.value > b.value ? a : b).key
           : "Veri Yok";
 
-      // 2. ADIM: Gönderi sayısını Firestore'dan çek
+      // 3. ADIM: Gönderi sayısını Firestore'dan çek
       final postSnapshot = await FirebaseFirestore.instance
           .collection('posts')
-          .where(
-            'userId',
-            isEqualTo: _user.uid,
-          ) // userName yerine userId kullanmak daha güvenlidir
+          .where('userId', isEqualTo: _user.uid)
           .get();
 
       int firestorePostCount = postSnapshot.docs.length;
 
-      // 3. ADIM: UI'ı güncelle
+      // 4. ADIM: UI'ı güncelle
       if (mounted) {
         setState(() {
           _totalMoodCount = totalMoodCount;

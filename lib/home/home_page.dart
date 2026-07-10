@@ -10,6 +10,7 @@ import 'package:humea/mood/note_page.dart';
 import 'package:humea/feed/feed.dart';
 import 'package:humea/ai/ai.dart';
 import 'dart:io';
+import 'package:humea/search/user_search_page.dart';
 
 // --- VERİ MODELİ ---
 class MoodEntry {
@@ -508,6 +509,21 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                   const Spacer(),
+                  IconButton(
+                    icon: const Icon(
+                      Icons.search,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const UserSearchPage(),
+                        ),
+                      );
+                    },
+                  ),
                   IconButton(
                     icon: const Icon(
                       Icons.logout,
