@@ -64,6 +64,7 @@ class _HomePageState extends State<HomePage> {
     // Firebase Auth durumunu kontrol edip öyle yükleme yapın
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
       if (user != null) {
+        _checkAndCreateUserDocument(user);
         _loadMoodsFromFirestore();
         _loadStatsFromFirestore();
       }
@@ -107,6 +108,40 @@ class _HomePageState extends State<HomePage> {
       });
     } catch (e) {
       print("Veri çekme hatası: $e");
+    }
+  }
+
+  // --- KULLANICI KONTROL VE KAYIT MEKANİZMASI ---
+  Future<void> _checkAndCreateUserDocument(User user) async {
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      // Eğer kullanıcının dökümanı yoksa otomatik oluşturuyoruz
+      if (!userDoc.exists) {
+        String calculatedName =
+            user.displayName ??
+            (user.email != null && user.email!.isNotEmpty
+                ? user.email!.split('@').first
+                : 'Kullanıcı');
+
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'uid': user.uid,
+          'userImageUrl': user.photoURL ?? '',
+          'name': calculatedName,
+          'searchName': calculatedName
+              .toLowerCase(), // Arama için küçük harf indeks
+          'email': user.email,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        print(
+          "Eski kullanıcının eksik Firestore kaydı HomePage üzerinden başarıyla oluşturuldu.",
+        );
+      }
+    } catch (e) {
+      print("HomePage kullanıcı dökümanı kontrol hatası: $e");
     }
   }
 

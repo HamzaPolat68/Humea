@@ -75,8 +75,10 @@ class _NotePageState extends State<NotePage> {
         .add({
           'text': commentText,
           'userName': user?.displayName ?? "Anonim",
+          'userImage': user?.photoURL ?? '',
           'timestamp': FieldValue.serverTimestamp(),
           'userId': user?.uid,
+          'likesCount': 0,
         });
   }
 

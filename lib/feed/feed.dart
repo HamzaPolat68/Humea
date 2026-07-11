@@ -3,7 +3,43 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/post_model.dart';
+import 'package:humea/models/post_model.dart';
+
+String readSafeStringField(
+  Object? data,
+  String fieldName, {
+  String fallback = '',
+}) {
+  if (data is Map) {
+    final value = data[fieldName];
+    if (value == null) {
+      return fallback;
+    }
+    return value.toString();
+  }
+  return fallback;
+}
+
+int readSafeIntField(Object? data, String fieldName, {int fallback = 0}) {
+  if (data is Map) {
+    final value = data[fieldName];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? fallback;
+  }
+  return fallback;
+}
+
+// Extract first http(s) URL from a possibly-wrapped string like
+// "[https://via.placeholder.com/150]()" or other markdown-like wrappers.
+String? extractFirstUrl(String input) {
+  try {
+    final match = RegExp(r'https?:\/\/[^\s)\]]+').firstMatch(input);
+    return match?.group(0);
+  } catch (_) {
+    return null;
+  }
+}
 
 class FeedPage extends StatefulWidget {
   final Future<void> Function() onPostDeleted;
@@ -15,6 +51,7 @@ class FeedPage extends StatefulWidget {
 
 class _FeedPageState extends State<FeedPage> {
   Set<String> _likedCommentIds = {};
+  Set<String> _likedPostIds = {};
   bool isPostLikedByMe = false;
 
   final String? _currentUserName =
@@ -388,6 +425,8 @@ class _FeedPageState extends State<FeedPage> {
       "DEBUG - Post ID: ${post.id} - User Image Değeri: '${post.userImage}'",
     );
 
+    final String? postImageUrl = extractFirstUrl(post.userImage);
+
     return Container(
       key: key,
       margin: const EdgeInsets.only(bottom: 20),
@@ -422,8 +461,8 @@ class _FeedPageState extends State<FeedPage> {
                   radius: 20,
                   // backgroundImage için ternary operatörü kullanarak mantığı kuruyoruz
                   backgroundImage: post.userImage.isNotEmpty
-                      ? (post.userImage.startsWith('http')
-                            ? NetworkImage(post.userImage) as ImageProvider
+                      ? (postImageUrl != null
+                            ? NetworkImage(postImageUrl) as ImageProvider
                             : FileImage(File(post.userImage)) as ImageProvider)
                       : null,
 
@@ -581,163 +620,131 @@ class _FeedPageState extends State<FeedPage> {
                             maxChildSize: 0.9,
                             expand: false,
                             builder: (context, scrollController) {
-                              return Column(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(16),
-                                    child: const Text(
-                                      "Yorumlar",
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
+                              return StatefulBuilder(
+                                builder: (context, modalSetState) {
+                                  return Column(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(16),
+                                        child: const Text(
+                                          "Yorumlar",
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
 
-                                  // YORUMLARI LİSTELEME
-                                  Expanded(
-                                    child: StreamBuilder<QuerySnapshot>(
-                                      stream: FirebaseFirestore.instance
-                                          .collection('posts')
-                                          .doc(post.id)
-                                          .collection('comments')
-                                          .orderBy(
-                                            'timestamp',
-                                            descending: true,
-                                          )
-                                          .snapshots(),
-                                      builder: (context, snapshot) {
-                                        if (!snapshot.hasData) {
-                                          return const Center(
-                                            child: CircularProgressIndicator(),
-                                          );
-                                        }
+                                      // YORUMLARI LİSTELEME
+                                      Expanded(
+                                        child: StreamBuilder<QuerySnapshot>(
+                                          stream: FirebaseFirestore.instance
+                                              .collection('posts')
+                                              .doc(post.id)
+                                              .collection('comments')
+                                              .orderBy(
+                                                'timestamp',
+                                                descending: true,
+                                              )
+                                              .snapshots(),
+                                          builder: (context, snapshot) {
+                                            if (!snapshot.hasData) {
+                                              return const Center(
+                                                child:
+                                                    CircularProgressIndicator(),
+                                              );
+                                            }
 
-                                        // StreamBuilder içindeki ListView.builder kısmını güncelle
-                                        return ListView.builder(
-                                          controller: scrollController,
-                                          itemCount: snapshot.data!.docs.length,
-                                          itemBuilder: (context, index) {
-                                            var doc =
-                                                snapshot.data!.docs[index];
-                                            final String currentUserId =
-                                                FirebaseAuth
-                                                    .instance
-                                                    .currentUser
-                                                    ?.uid ??
-                                                "";
-                                            final bool isMyComment =
-                                                doc['userId'] == currentUserId;
-                                            final bool isCommentLiked =
-                                                _likedCommentIds.contains(
-                                                  doc.id,
+                                            // StreamBuilder içindeki ListView.builder kısmını güncelle
+                                            return ListView.builder(
+                                              controller: scrollController,
+                                              itemCount:
+                                                  snapshot.data!.docs.length,
+                                              itemBuilder: (context, index) {
+                                                var doc =
+                                                    snapshot.data!.docs[index];
+                                                final String currentUserId =
+                                                    FirebaseAuth
+                                                        .instance
+                                                        .currentUser
+                                                        ?.uid ??
+                                                    "";
+                                                final bool isMyComment =
+                                                    doc['userId'] ==
+                                                    currentUserId;
+                                                final bool isCommentLiked =
+                                                    _likedCommentIds.contains(
+                                                      doc.id,
+                                                    );
+
+                                                return _buildCommentItem(
+                                                  postId: post.id,
+                                                  doc: doc,
+                                                  isMyComment: isMyComment,
+                                                  isCommentLiked:
+                                                      isCommentLiked,
+                                                  onLikePressed: () {
+                                                    modalSetState(() {
+                                                      _toggleCommentLike(
+                                                        post.id,
+                                                        doc.id,
+                                                        avoidParentSetState:
+                                                            true,
+                                                      );
+                                                    });
+                                                  },
                                                 );
-
-                                            return ListTile(
-                                              title: Text(
-                                                doc['userName'] ?? "Anonim",
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                              subtitle: Text(doc['text'] ?? ""),
-                                              trailing: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  // Beğeni Sayısı ve Butonu
-                                                  Text(
-                                                    "${doc['likesCount'] ?? 0}",
-                                                  ),
-                                                  IconButton(
-                                                    icon: Icon(
-                                                      isCommentLiked
-                                                          ? Icons.favorite
-                                                          : Icons
-                                                                .favorite_border,
-                                                      color: isCommentLiked
-                                                          ? Colors.grey
-                                                          : Colors.red,
-                                                    ),
-                                                    onPressed: () =>
-                                                        _toggleCommentLike(
-                                                          post.id,
-                                                          doc.id,
-                                                        ),
-                                                  ),
-                                                  // Silme Butonu
-                                                  if (isMyComment)
-                                                    IconButton(
-                                                      icon: const Icon(
-                                                        Icons.edit_outlined,
-                                                        color: Colors.blue,
-                                                      ),
-                                                      onPressed: () =>
-                                                          _editComment(
-                                                            post.id,
-                                                            doc.id,
-                                                            doc['text'] ?? "",
-                                                          ),
-                                                    ),
-                                                  IconButton(
-                                                    icon: const Icon(
-                                                      Icons.delete_outline,
-
-                                                      color: Colors.red,
-                                                    ),
-                                                    onPressed: () =>
-                                                        _deleteComment(
-                                                          post.id,
-                                                          doc.id,
-                                                        ),
-                                                  ),
-                                                ],
-                                              ),
+                                              },
                                             );
                                           },
-                                        );
-                                      },
-                                    ),
-                                  ),
+                                        ),
+                                      ),
 
-                                  // YORUM YAZMA ALANI
-                                  Padding(
-                                    padding: const EdgeInsets.all(8.0),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: TextField(
-                                            controller: commentFieldController,
-                                            decoration: InputDecoration(
-                                              hintText: "Yorum ekle...",
-                                              border: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(20),
+                                      // YORUM YAZMA ALANI
+                                      Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextField(
+                                                controller:
+                                                    commentFieldController,
+                                                decoration: InputDecoration(
+                                                  hintText: "Yorum ekle...",
+                                                  border: OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          20,
+                                                        ),
+                                                  ),
+                                                ),
                                               ),
                                             ),
-                                          ),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.send,
+                                                color: Colors.blue,
+                                              ),
+                                              onPressed: () {
+                                                if (commentFieldController.text
+                                                    .trim()
+                                                    .isNotEmpty) {
+                                                  // Yorumu ekle
+                                                  _addComment(
+                                                    post.id,
+                                                    commentFieldController.text,
+                                                  );
+                                                  commentFieldController
+                                                      .clear();
+                                                }
+                                              },
+                                            ),
+                                          ],
                                         ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.send,
-                                            color: Colors.blue,
-                                          ),
-                                          onPressed: () {
-                                            if (commentFieldController.text
-                                                .trim()
-                                                .isNotEmpty) {
-                                              // Yorumu ekle
-                                              _addComment(
-                                                post.id,
-                                                commentFieldController.text,
-                                              );
-                                              commentFieldController.clear();
-                                            }
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+                                      ),
+                                    ],
+                                  );
+                                },
                               );
                             },
                           ),
@@ -811,6 +818,7 @@ class _FeedPageState extends State<FeedPage> {
         'text': commentText,
         'userId': user.uid,
         'userName': user.displayName ?? 'Anonim',
+        'userImage': user.photoURL ?? '',
         'timestamp': FieldValue.serverTimestamp(),
         'likesCount': 0, // Başlangıç beğeni sayısı
       };
@@ -825,10 +833,30 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
-  Future<void> _toggleCommentLike(String postId, String commentId) async {
+  // Toggle comment like with optional control to avoid calling setState
+  // on the parent FeedPage. When liking from the comments bottom sheet we
+  // call this with `avoidParentSetState: true` and use the sheet's
+  // StatefulBuilder to update UI locally so the whole page doesn't rebuild.
+  Future<void> _toggleCommentLike(
+    String postId,
+    String commentId, {
+    bool avoidParentSetState = false,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     String key = 'liked_comment_$commentId';
     bool isAlreadyLiked = _likedCommentIds.contains(commentId);
+
+    // Update local set first (optimistic)
+    if (isAlreadyLiked) {
+      _likedCommentIds.remove(commentId);
+    } else {
+      _likedCommentIds.add(commentId);
+    }
+
+    // If caller wants the parent to rebuild, trigger setState here.
+    if (!avoidParentSetState && mounted) {
+      setState(() {});
+    }
 
     final commentRef = FirebaseFirestore.instance
         .collection('posts')
@@ -836,20 +864,22 @@ class _FeedPageState extends State<FeedPage> {
         .collection('comments')
         .doc(commentId);
 
-    await commentRef.update({
-      'likesCount': FieldValue.increment(isAlreadyLiked ? -1 : 1),
-    });
-
-    await prefs.setBool(key, !isAlreadyLiked);
-
-    if (mounted) {
-      setState(() {
-        if (isAlreadyLiked) {
-          _likedCommentIds.remove(commentId);
-        } else {
-          _likedCommentIds.add(commentId);
-        }
+    try {
+      await commentRef.update({
+        'likesCount': FieldValue.increment(isAlreadyLiked ? -1 : 1),
       });
+      await prefs.setBool(key, !isAlreadyLiked);
+    } catch (e) {
+      debugPrint('Yorum beğeni güncelleme hatası: $e');
+      // Revert optimistic change on error
+      if (isAlreadyLiked) {
+        _likedCommentIds.add(commentId);
+      } else {
+        _likedCommentIds.remove(commentId);
+      }
+      if (!avoidParentSetState && mounted) {
+        setState(() {});
+      }
     }
   }
 
@@ -863,6 +893,187 @@ class _FeedPageState extends State<FeedPage> {
     } catch (e) {
       debugPrint('Yorum silme hatası: $e');
     }
+  }
+
+  Widget _buildCommentItem({
+    required String postId,
+    required QueryDocumentSnapshot doc,
+    required bool isMyComment,
+    required bool isCommentLiked,
+    VoidCallback? onLikePressed,
+  }) {
+    final commentData = doc.data();
+    final String userImage = readSafeStringField(commentData, 'userImage');
+    final String userName = readSafeStringField(
+      commentData,
+      'userName',
+      fallback: 'Anonim',
+    );
+    final String commentText = readSafeStringField(commentData, 'text');
+    final int likesCount = readSafeIntField(commentData, 'likesCount');
+    final Timestamp? timestamp = (commentData is Map)
+        ? (commentData['timestamp'] as Timestamp?)
+        : null;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: Colors.blueGrey[50],
+                // Support markdown-wrapped or raw URLs in userImage
+                backgroundImage: userImage.isNotEmpty
+                    ? (extractFirstUrl(userImage) != null
+                          ? NetworkImage(extractFirstUrl(userImage)!)
+                                as ImageProvider
+                          : FileImage(File(userImage)))
+                    : null,
+                child: userImage.isEmpty
+                    ? Text(
+                        userName.isNotEmpty
+                            ? userName.substring(0, 1).toUpperCase()
+                            : 'A',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 6,
+                            children: [
+                              Text(
+                                userName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              Text(
+                                _formatDate(
+                                  timestamp?.toDate() ?? DateTime.now(),
+                                ),
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(commentText, style: const TextStyle(fontSize: 14)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed:
+                        onLikePressed ??
+                        () => _toggleCommentLike(postId, doc.id),
+                    icon: Icon(
+                      isCommentLiked ? Icons.favorite : Icons.favorite_border,
+                      color: isCommentLiked ? Colors.red : Colors.grey,
+                      size: 22,
+                    ),
+                  ),
+                  Text(
+                    '$likesCount',
+                    style: TextStyle(
+                      color: isCommentLiked
+                          ? Colors.red[700]
+                          : Colors.grey[600],
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (isMyComment)
+            Row(
+              children: [
+                InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _editComment(postId, doc.id, commentText),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.edit_outlined, size: 18, color: Colors.blue),
+                        SizedBox(width: 6),
+                        Text(
+                          'Düzenle',
+                          style: TextStyle(color: Colors.blue, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _deleteComment(postId, doc.id),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                        SizedBox(width: 6),
+                        Text(
+                          'Sil',
+                          style: TextStyle(color: Colors.red, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -897,11 +1108,12 @@ void _showLikesDialog(
                       final String userName = (like['userName'] ?? 'Anonim')
                           .toString();
 
+                      final String? likeImageUrl = extractFirstUrl(userImage);
                       return ListTile(
                         leading: CircleAvatar(
                           backgroundImage: userImage.isNotEmpty
-                              ? (userImage.startsWith('http')
-                                    ? NetworkImage(userImage)
+                              ? (likeImageUrl != null
+                                    ? NetworkImage(likeImageUrl)
                                     : FileImage(File(userImage)))
                               : null,
                           child: userImage.isEmpty
