@@ -11,6 +11,7 @@ import 'package:humea/feed/feed.dart';
 import 'package:humea/ai/ai.dart';
 import 'dart:io';
 import 'package:humea/search/user_search_page.dart';
+import 'package:humea/services/notification_service.dart';
 
 // --- VERİ MODELİ ---
 class MoodEntry {
@@ -72,15 +73,12 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> setupNotifications(String userId) async {
-    FirebaseMessaging messaging = FirebaseMessaging.instance;
-
-    await messaging.requestPermission(alert: true, badge: true, sound: true);
-    String? token = await messaging.getToken();
-
-    if (token != null) {
-      await FirebaseFirestore.instance.collection('users').doc(userId).set({
-        'fcmToken': token,
-      }, SetOptions(merge: true));
+    try {
+      final messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission(alert: true, badge: true, sound: true);
+      await NotificationService.syncFcmTokenToFirestore(userId: userId);
+    } catch (e) {
+      debugPrint('FCM token synchronization failed: $e');
     }
   }
 
@@ -609,25 +607,61 @@ class _HomePageState extends State<HomePage> {
                       padding: const EdgeInsets.symmetric(horizontal: 10),
                       child: Row(
                         children: [
-                          _buildMoodIcon(const Color(0xFF4CAF50), "😍"), // 10.0
+                          _buildMoodIcon(
+                            const Color(0xFF4CAF50),
+                            "😍",
+                            "Harika",
+                          ),
                           const SizedBox(width: 12),
-                          _buildMoodIcon(const Color(0xFF8BC34A), "🤩"), // 9.0
+                          _buildMoodIcon(
+                            const Color(0xFF8BC34A),
+                            "🤩",
+                            "Heyecanlı",
+                          ),
                           const SizedBox(width: 12),
-                          _buildMoodIcon(const Color(0xFF2196F3), "🙂"), // 8.0
+                          _buildMoodIcon(
+                            const Color(0xFF2196F3),
+                            "🙂",
+                            "İyi/Mutlu",
+                          ),
                           const SizedBox(width: 12),
-                          _buildMoodIcon(const Color(0xFF81D4FA), "😊"), // 7.0
+                          _buildMoodIcon(
+                            const Color(0xFF81D4FA),
+                            "😊",
+                            "Huzurlu",
+                          ),
                           const SizedBox(width: 12),
-                          _buildMoodIcon(const Color(0xFFFFCC80), "😞"), // 6.0
+                          _buildMoodIcon(
+                            const Color(0xFFFFCC80),
+                            "😞",
+                            "Hüzünlü",
+                          ),
                           const SizedBox(width: 12),
-                          _buildMoodIcon(const Color(0xFFCFD8DC), "🤔"), // 5.0
+                          _buildMoodIcon(const Color(0xFFCFD8DC), "🤔", "Nötr"),
                           const SizedBox(width: 12),
-                          _buildMoodIcon(const Color(0xFFFF9800), "😡"), // 4.0
+                          _buildMoodIcon(
+                            const Color(0xFFFF9800),
+                            "😡",
+                            "Öfkeli",
+                          ),
                           const SizedBox(width: 12),
-                          _buildMoodIcon(const Color(0xFFEF9A9A), "😟"), // 3.0
+                          _buildMoodIcon(
+                            const Color(0xFFEF9A9A),
+                            "😟",
+                            "Endişeli",
+                          ),
                           const SizedBox(width: 12),
-                          _buildMoodIcon(const Color(0xFFB0BEC5), "💤"), // 2.0
+                          _buildMoodIcon(
+                            const Color(0xFFB0BEC5),
+                            "💤",
+                            "Yorgun",
+                          ),
                           const SizedBox(width: 12),
-                          _buildMoodIcon(const Color(0xFFF44336), "😰"), // 1.0
+                          _buildMoodIcon(
+                            const Color(0xFFF44336),
+                            "😰",
+                            "Kaygılı",
+                          ),
                         ],
                       ),
                     ),
@@ -736,16 +770,30 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildMoodIcon(Color color, String emoji) {
+  Widget _buildMoodIcon(Color color, String emoji, String label) {
     return GestureDetector(
       onTap: () => setState(() {
         _selectedEmoji = emoji;
         _selectedColor = color;
       }),
-      child: CircleAvatar(
-        backgroundColor: color,
-        radius: 30,
-        child: Text(emoji, style: const TextStyle(fontSize: 35)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            backgroundColor: color,
+            radius: 30,
+            child: Text(emoji, style: const TextStyle(fontSize: 35)),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+        ],
       ),
     );
   }

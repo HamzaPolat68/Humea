@@ -2,7 +2,7 @@ import 'dart:io'; // Cihaz içi dosyaları (File) okumak için eklendi
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:humea/features/auth/login_page.dart';
 import 'package:humea/profile/edit_profile_page.dart';
@@ -142,7 +142,7 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final userPosts = await FirebaseFirestore.instance
           .collection('posts')
-          .where('userName', isEqualTo: _user?.displayName ?? "")
+          .where('userId', isEqualTo: _user?.uid ?? "")
           .get();
 
       final batch = FirebaseFirestore.instance.batch();
@@ -152,6 +152,24 @@ class _ProfilePageState extends State<ProfilePage> {
       await batch.commit();
     } catch (e) {
       debugPrint("Akış resmi senkronizasyon hatası: $e");
+    }
+  }
+
+  Future<String?> _uploadImageToStorage(String localPath) async {
+    try {
+      final file = File(localPath);
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('profile_images')
+          .child(_user!.uid)
+          .child('profile.jpg');
+
+      await storageRef.putFile(file);
+      final downloadUrl = await storageRef.getDownloadURL();
+      return downloadUrl;
+    } catch (e) {
+      debugPrint("Storage yükleme hatası: $e");
+      return null;
     }
   }
 
@@ -166,13 +184,40 @@ class _ProfilePageState extends State<ProfilePage> {
       );
 
       if (image != null) {
-        await _user!.updatePhotoURL(image.path);
-        await _syncProfileImageWithFirestore(image.path);
+        _showSnackBar("Fotoğraf yükleniyor...", Colors.blue);
 
-        setState(() {
-          _profileImageUrl = image.path;
-        });
-        _showSnackBar("Profil fotoğrafı başarıyla güncellendi!", Colors.green);
+        // 1. Firebase Storage'a yükle
+        final downloadUrl = await _uploadImageToStorage(image.path);
+
+        if (downloadUrl == null) {
+          _showSnackBar(
+            "Fotoğraf yüklenemedi, tekrar deneyin.",
+            Colors.redAccent,
+          );
+          return;
+        }
+
+        // 2. Auth profilini güncelle
+        await _user!.updatePhotoURL(downloadUrl);
+
+        // 3. Eski postların resmini güncelle
+        await _syncProfileImageWithFirestore(downloadUrl);
+
+        // 4. users dokümanını güncelle
+        await FirebaseFirestore.instance.collection('users').doc(_user.uid).set(
+          {'userImageUrl': downloadUrl, 'photoURL': downloadUrl},
+          SetOptions(merge: true),
+        );
+
+        if (mounted) {
+          setState(() {
+            _profileImageUrl = downloadUrl;
+          });
+          _showSnackBar(
+            "Profil fotoğrafı başarıyla güncellendi!",
+            Colors.green,
+          );
+        }
       }
     } catch (e) {
       debugPrint("Resim seçme hatası: $e");
@@ -186,11 +231,16 @@ class _ProfilePageState extends State<ProfilePage> {
       await _user!.updatePhotoURL(avatarUrl);
       await _syncProfileImageWithFirestore(avatarUrl);
 
+      await FirebaseFirestore.instance.collection('users').doc(_user.uid).set({
+        'userImageUrl': avatarUrl,
+        'photoURL': avatarUrl,
+      }, SetOptions(merge: true));
+
       if (mounted) {
         setState(() {
           _profileImageUrl = avatarUrl;
         });
-        Navigator.pop(context); // BottomSheet'i kapatır
+        Navigator.pop(context);
         _showSnackBar("Avatarınız başarıyla güncellendi! ✨", Colors.green);
       }
     } catch (e) {

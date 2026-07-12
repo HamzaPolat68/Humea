@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'other_user_profile_page.dart';
@@ -13,6 +14,30 @@ class UserSearchPage extends StatefulWidget {
 class _UserSearchPageState extends State<UserSearchPage> {
   String _searchQuery = "";
   final String _currentUid = FirebaseAuth.instance.currentUser?.uid ?? "";
+
+  ImageProvider _resolveImageProvider(String? photoUrl) {
+    final url = (photoUrl ?? '').trim();
+    if (url.isEmpty) {
+      return const NetworkImage('https://via.placeholder.com/150');
+    }
+
+    // If it's a network URL
+    try {
+      final uri = Uri.parse(url);
+      if (uri.scheme == 'http' || uri.scheme == 'https') {
+        return NetworkImage(url);
+      }
+    } catch (_) {}
+
+    // If it's a local file path
+    try {
+      final file = File(url);
+      if (file.existsSync()) return FileImage(file);
+    } catch (_) {}
+
+    // Fallback to network placeholder
+    return const NetworkImage('https://via.placeholder.com/150');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -86,12 +111,16 @@ class _UserSearchPageState extends State<UserSearchPage> {
                     final String fullName =
                         userData['name'] ?? 'İsimsiz Kullanıcı';
                     final String photoUrl =
-                        userData['photoURL'] ??
-                        'https://via.placeholder.com/150';
+                        (userData['userImageUrl'] as String?)?.isNotEmpty ==
+                            true
+                        ? userData['userImageUrl']
+                        : (userData['photoURL'] as String?)?.isNotEmpty == true
+                        ? userData['photoURL']
+                        : 'https://via.placeholder.com/150';
 
                     return ListTile(
                       leading: CircleAvatar(
-                        backgroundImage: NetworkImage(photoUrl),
+                        backgroundImage: _resolveImageProvider(photoUrl),
                         backgroundColor: Colors.grey[200],
                       ),
                       title: Text(

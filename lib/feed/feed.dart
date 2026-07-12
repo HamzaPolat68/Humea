@@ -54,9 +54,6 @@ class _FeedPageState extends State<FeedPage> {
   Set<String> _likedPostIds = {};
   bool isPostLikedByMe = false;
 
-  final String? _currentUserName =
-      FirebaseAuth.instance.currentUser?.displayName;
-
   // KAYDIRMA ÇUBUĞU İÇİN KONTROLLER
   final ScrollController _feedScrollController = ScrollController();
 
@@ -418,8 +415,7 @@ class _FeedPageState extends State<FeedPage> {
     final bool isPostLikedByMe =
         currentUserId != null &&
         post.likesList.any((like) => like['userId'] == currentUserId);
-    final bool isMyPost =
-        _currentUserName != null && post.userName == _currentUserName;
+    final bool isMyPost = currentUserId != null && post.userId == currentUserId;
 
     debugPrint(
       "DEBUG - Post ID: ${post.id} - User Image Değeri: '${post.userImage}'",
@@ -733,6 +729,7 @@ class _FeedPageState extends State<FeedPage> {
                                                   _addComment(
                                                     post.id,
                                                     commentFieldController.text,
+                                                    post.userId,
                                                   );
                                                   commentFieldController
                                                       .clear();
@@ -806,7 +803,11 @@ class _FeedPageState extends State<FeedPage> {
     );
   }
 
-  Future<void> _addComment(String postId, String text) async {
+  Future<void> _addComment(
+    String postId,
+    String text,
+    String recipientUserId,
+  ) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
@@ -828,6 +829,18 @@ class _FeedPageState extends State<FeedPage> {
           .doc(postId);
       await postRef.collection('comments').add(commentData);
       await postRef.update({'commentsCount': FieldValue.increment(1)});
+
+      if (recipientUserId != user.uid) {
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'recipientId': recipientUserId,
+          'senderId': user.uid,
+          'senderName': user.displayName ?? 'Anonim',
+          'type': 'comment',
+          'postId': postId,
+          'isRead': false,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      }
     } catch (e) {
       debugPrint('Yorum ekleme hatası: $e');
     }

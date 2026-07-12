@@ -5,6 +5,7 @@ import 'package:animate_do/animate_do.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:humea/features/auth/sign_up.dart';
 import 'package:humea/home/home_page.dart';
+import 'package:humea/services/notification_service.dart';
 
 class LoginPage extends StatefulWidget {
   final String? initialEmail;
@@ -83,6 +84,8 @@ class _LoginPageState extends State<LoginPage> {
         });
         print("Eski kullanıcının eksik Firestore kaydı başarıyla oluşturuldu.");
       }
+
+      await NotificationService.syncFcmTokenToFirestore(userId: user.uid);
     }
     // ===========================================================================
 
@@ -137,6 +140,8 @@ class _LoginPageState extends State<LoginPage> {
             "Google ile giren eski kullanıcının eksik Firestore kaydı oluşturuldu.",
           );
         }
+
+        await NotificationService.syncFcmTokenToFirestore(userId: user.uid);
       }
       // =============================================================================
 

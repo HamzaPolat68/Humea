@@ -88,13 +88,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
       // 3. Profil ve Firestore Güncelleme
       await _user.updateDisplayName(_nameController.text);
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(_user.uid)
-          .update({
-            'name': _nameController.text,
-            'birthDate': _selectedDate?.toIso8601String(),
-          });
+      await FirebaseFirestore.instance.collection('users').doc(_user.uid).update({
+        'name': _nameController.text,
+        'birthDate': _selectedDate?.toIso8601String(),
+        'birthMonthDay': _selectedDate != null
+            ? "${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}"
+            : null, // YENİ
+      });
 
       if (mounted) {
         Navigator.pop(context);

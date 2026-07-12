@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:humea/features/auth/login_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:humea/services/notification_service.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -76,10 +77,15 @@ class _SignUpPageState extends State<SignUpPage> {
             'name': _nameController.text,
             'searchName': _nameController.text.trim().toLowerCase(),
             'email': email,
-            'birthDate': _pickedDate!
-                .toIso8601String(), // _pickedDate kullanıldı
+            'birthDate': _pickedDate!.toIso8601String(),
+            'birthMonthDay':
+                "${_pickedDate!.month.toString().padLeft(2, '0')}-${_pickedDate!.day.toString().padLeft(2, '0')}", // YENİ
             'createdAt': FieldValue.serverTimestamp(),
           });
+
+      await NotificationService.syncFcmTokenToFirestore(
+        userId: userCredential.user!.uid,
+      );
 
       if (mounted) {
         _showMessage("Hesap başarıyla oluşturuldu! ✨", Colors.green);
