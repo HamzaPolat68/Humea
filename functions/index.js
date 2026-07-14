@@ -23,10 +23,22 @@ exports.onNotificationCreated = onDocumentCreated("notifications/{notificationId
     if (!userDoc.exists || !userDoc.data().fcmToken) return null;
 
     const type = data.type || "like";
-    const title = type === "comment" ? "Yeni Yorum!" : "Yeni Beğeni!";
-    const body = type === "comment"
-        ? `${data.senderName || "Birisi"} gönderine yorum yaptı.`
-        : `${data.senderName || "Birisi"} gönderini beğendi.`;
+    let title = "Yeni Beğeni!";
+    let body = `${data.senderName || "Birisi"} gönderini beğendi.`;
+
+    if (type === 'comment') {
+        title = 'Yeni Yorum!';
+        body = `${data.senderName || 'Birisi'} gönderine yorum yaptı.`;
+    } else if (type === 'comment_like') {
+        title = 'Yorum Beğenisi!';
+        body = `${data.senderName || 'Birisi'} yorumunu beğendi.`;
+    } else if (type === 'reply') {
+        title = 'Yeni Yanıt!';
+        body = `${data.senderName || 'Birisi'} yorumuna yanıt verdi.`;
+    } else if (type === 'reply_like') {
+        title = 'Yanıt Beğenisi!';
+        body = `${data.senderName || 'Birisi'} yanıtını beğendi.`;
+    }
 
     const message = {
         notification: {
@@ -65,7 +77,7 @@ async function postBirthdayMessages() {
             userImage: "assets/logo.png",
             moodEmoji: "🎂",
             moodTitle: "Doğum Günü",
-            note: `${user.name} adlı kişinin doğum günü, Yaş sadece bir sayı bunu kesinlikle unutma!!!! Humea Ailesi olarak ailenle ve arkadaşlarınla mutlu, sağlıklı ve huzurlu bir ömür geçirmen dileğiyle! 🎉`,
+            note: `${user.name} adlı kişinin doğum günü 🎂, Yaş sadece bir sayı bunu kesinlikle unutma!!!! Humea Ailesi olarak, sevdiklerinle birlikte mutlu, sağlıklı ve huzurlu bir ömür geçirmeni dileriz! 🎉`,
             likes: 0,
             likesList: [],
             commentsCount: 0,

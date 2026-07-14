@@ -51,7 +51,8 @@ class FeedPage extends StatefulWidget {
 
 class _FeedPageState extends State<FeedPage> {
   Set<String> _likedCommentIds = {};
-  Set<String> _likedPostIds = {};
+  Set<String> _likedReplyIds = {};
+  final Set<String> _likedPostIds = {};
   bool isPostLikedByMe = false;
 
   // KAYDIRMA ÇUBUĞU İÇİN KONTROLLER
@@ -83,9 +84,16 @@ class _FeedPageState extends State<FeedPage> {
         .map((key) => key.substring('liked_comment_'.length))
         .toSet();
 
+    final likedReplyIds = prefs
+        .getKeys()
+        .where((key) => key.startsWith('liked_reply_'))
+        .map((key) => key.substring('liked_reply_'.length))
+        .toSet();
+
     if (mounted) {
       setState(() {
         _likedCommentIds = likedCommentIds;
+        _likedReplyIds = likedReplyIds;
       });
     }
   }
@@ -820,7 +828,11 @@ class _FeedPageState extends State<FeedPage> {
         'userId': user.uid,
         'userName': user.displayName ?? 'Anonim',
         'userImage': user.photoURL ?? '',
-        'timestamp': FieldValue.serverTimestamp(),
+        // Use a client-side timestamp so the comment appears immediately
+        // in queries that order by 'timestamp'. ServerTimestamp can be
+        // null until the server writes it, which may hide the doc in
+        // ordered queries temporarily.
+        'timestamp': Timestamp.now(),
         'likesCount': 0, // Başlangıç beğeni sayısı
       };
 
@@ -846,10 +858,55 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
-  // Toggle comment like with optional control to avoid calling setState
-  // on the parent FeedPage. When liking from the comments bottom sheet we
-  // call this with `avoidParentSetState: true` and use the sheet's
-  // StatefulBuilder to update UI locally so the whole page doesn't rebuild.
+  Future<void> _addReply(
+    String postId,
+    String commentId,
+    String text,
+    String recipientUserId,
+  ) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final replyText = text.trim();
+      if (replyText.isEmpty) return;
+
+      final replyData = {
+        'text': replyText,
+        'userId': user.uid,
+        'userName': user.displayName ?? 'Anonim',
+        'userImage': user.photoURL ?? '',
+        // Use local timestamp for immediate visibility in the UI
+        'timestamp': Timestamp.now(),
+        'likesCount': 0,
+      };
+
+      final commentRef = FirebaseFirestore.instance
+          .collection('posts')
+          .doc(postId)
+          .collection('comments')
+          .doc(commentId);
+
+      await commentRef.collection('replies').add(replyData);
+      await commentRef.update({'repliesCount': FieldValue.increment(1)});
+
+      if (recipientUserId != user.uid) {
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'recipientId': recipientUserId,
+          'senderId': user.uid,
+          'senderName': user.displayName ?? 'Anonim',
+          'type': 'reply',
+          'postId': postId,
+          'commentId': commentId,
+          'isRead': false,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      debugPrint('Yanıt ekleme hatası: $e');
+    }
+  }
+
   Future<void> _toggleCommentLike(
     String postId,
     String commentId, {
@@ -859,7 +916,6 @@ class _FeedPageState extends State<FeedPage> {
     String key = 'liked_comment_$commentId';
     bool isAlreadyLiked = _likedCommentIds.contains(commentId);
 
-    // Update local set first (optimistic)
     if (isAlreadyLiked) {
       _likedCommentIds.remove(commentId);
     } else {
@@ -881,6 +937,29 @@ class _FeedPageState extends State<FeedPage> {
       await commentRef.update({
         'likesCount': FieldValue.increment(isAlreadyLiked ? -1 : 1),
       });
+
+      if (!isAlreadyLiked) {
+        final commentDoc = await commentRef.get();
+        final commentData = commentDoc.data();
+        final String commentOwnerId = commentData?['userId']?.toString() ?? '';
+        final String senderName =
+            FirebaseAuth.instance.currentUser?.displayName ?? 'Anonim';
+
+        if (commentOwnerId.isNotEmpty &&
+            commentOwnerId != FirebaseAuth.instance.currentUser?.uid) {
+          await FirebaseFirestore.instance.collection('notifications').add({
+            'recipientId': commentOwnerId,
+            'senderId': FirebaseAuth.instance.currentUser?.uid ?? '',
+            'senderName': senderName,
+            'type': 'comment_like',
+            'postId': postId,
+            'commentId': commentId,
+            'isRead': false,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+        }
+      }
+
       await prefs.setBool(key, !isAlreadyLiked);
     } catch (e) {
       debugPrint('Yorum beğeni güncelleme hatası: $e');
@@ -896,6 +975,72 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
+  Future<void> _toggleReplyLike(
+    String postId,
+    String commentId,
+    String replyId, {
+    bool avoidParentSetState = false,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    String key = 'liked_reply_$replyId';
+    bool isAlreadyLiked = _likedReplyIds.contains(replyId);
+
+    if (isAlreadyLiked) {
+      _likedReplyIds.remove(replyId);
+    } else {
+      _likedReplyIds.add(replyId);
+    }
+
+    if (!avoidParentSetState && mounted) setState(() {});
+
+    final replyRef = FirebaseFirestore.instance
+        .collection('posts')
+        .doc(postId)
+        .collection('comments')
+        .doc(commentId)
+        .collection('replies')
+        .doc(replyId);
+
+    try {
+      await replyRef.update({
+        'likesCount': FieldValue.increment(isAlreadyLiked ? -1 : 1),
+      });
+
+      if (!isAlreadyLiked) {
+        final replyDoc = await replyRef.get();
+        final replyData = replyDoc.data();
+        final String replyOwnerId = replyData?['userId']?.toString() ?? '';
+        final String senderName =
+            FirebaseAuth.instance.currentUser?.displayName ?? 'Anonim';
+
+        if (replyOwnerId.isNotEmpty &&
+            replyOwnerId != FirebaseAuth.instance.currentUser?.uid) {
+          await FirebaseFirestore.instance.collection('notifications').add({
+            'recipientId': replyOwnerId,
+            'senderId': FirebaseAuth.instance.currentUser?.uid ?? '',
+            'senderName': senderName,
+            'type': 'reply_like',
+            'postId': postId,
+            'commentId': commentId,
+            'replyId': replyId,
+            'isRead': false,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+        }
+      }
+
+      await prefs.setBool(key, !isAlreadyLiked);
+    } catch (e) {
+      debugPrint('Reply like update error: $e');
+      if (isAlreadyLiked) {
+        _likedReplyIds.add(replyId);
+      } else {
+        _likedReplyIds.remove(replyId);
+      }
+      if (!avoidParentSetState && mounted) setState(() {});
+    }
+  }
+
   Future<void> _deleteComment(String postId, String commentId) async {
     try {
       final postRef = FirebaseFirestore.instance
@@ -905,6 +1050,25 @@ class _FeedPageState extends State<FeedPage> {
       await postRef.update({'commentsCount': FieldValue.increment(-1)});
     } catch (e) {
       debugPrint('Yorum silme hatası: $e');
+    }
+  }
+
+  Future<void> _deleteReply(
+    String postId,
+    String commentId,
+    String replyId,
+  ) async {
+    try {
+      final commentRef = FirebaseFirestore.instance
+          .collection('posts')
+          .doc(postId)
+          .collection('comments')
+          .doc(commentId);
+
+      await commentRef.collection('replies').doc(replyId).delete();
+      await commentRef.update({'repliesCount': FieldValue.increment(-1)});
+    } catch (e) {
+      debugPrint('Yanıt silme hatası: $e');
     }
   }
 
@@ -1005,6 +1169,181 @@ class _FeedPageState extends State<FeedPage> {
                     ),
                     const SizedBox(height: 6),
                     Text(commentText, style: const TextStyle(fontSize: 14)),
+
+                    const SizedBox(height: 8),
+                    // Replies (yorum yanıtları) görüntüleme
+                    StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('posts')
+                          .doc(postId)
+                          .collection('comments')
+                          .doc(doc.id)
+                          .collection('replies')
+                          .orderBy('timestamp', descending: false)
+                          .snapshots(),
+                      builder: (context, replySnap) {
+                        if (!replySnap.hasData ||
+                            replySnap.data!.docs.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+
+                        return Column(
+                          children: replySnap.data!.docs.map((replyDoc) {
+                            final reply =
+                                replyDoc.data() as Map<String, dynamic>;
+                            final String rUserName = readSafeStringField(
+                              reply,
+                              'userName',
+                              fallback: 'Anonim',
+                            );
+                            final String rText = readSafeStringField(
+                              reply,
+                              'text',
+                            );
+                            final Timestamp? rTs =
+                                reply['timestamp'] as Timestamp?;
+                            final String rTime = _formatDate(
+                              rTs?.toDate() ?? DateTime.now(),
+                            );
+                            final String rUserImg = readSafeStringField(
+                              reply,
+                              'userImage',
+                            );
+                            final String? rImageUrl = extractFirstUrl(rUserImg);
+                            final int rLikesCount = readSafeIntField(
+                              reply,
+                              'likesCount',
+                            );
+                            final bool isReplyLiked = _likedReplyIds.contains(
+                              replyDoc.id,
+                            );
+
+                            final String rOwnerId = readSafeStringField(
+                              reply,
+                              'userId',
+                            );
+                            final bool isMyReply =
+                                rOwnerId.isNotEmpty &&
+                                rOwnerId ==
+                                    FirebaseAuth.instance.currentUser?.uid;
+
+                            return Container(
+                              margin: const EdgeInsets.only(top: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 12,
+                                    backgroundImage: rUserImg.isNotEmpty
+                                        ? (rImageUrl != null
+                                                  ? NetworkImage(rImageUrl)
+                                                  : FileImage(File(rUserImg)))
+                                              as ImageProvider
+                                        : null,
+                                    child: rUserImg.isEmpty
+                                        ? Text(
+                                            rUserName.isNotEmpty
+                                                ? rUserName[0].toUpperCase()
+                                                : 'A',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                            ),
+                                          )
+                                        : null,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          rUserName,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          rText,
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          rTime,
+                                          style: const TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        onPressed: () => _toggleReplyLike(
+                                          postId,
+                                          doc.id,
+                                          replyDoc.id,
+                                        ),
+                                        icon: Icon(
+                                          isReplyLiked
+                                              ? Icons.favorite
+                                              : Icons.favorite_border,
+                                          color: isReplyLiked
+                                              ? Colors.red
+                                              : Colors.grey,
+                                          size: 18,
+                                        ),
+                                      ),
+                                      Text(
+                                        '$rLikesCount',
+                                        style: TextStyle(
+                                          color: isReplyLiked
+                                              ? Colors.red[700]
+                                              : Colors.grey[600],
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      if (isMyReply)
+                                        IconButton(
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          onPressed: () => _deleteReply(
+                                            postId,
+                                            doc.id,
+                                            replyDoc.id,
+                                          ),
+                                          icon: const Icon(
+                                            Icons.delete_outline,
+                                            color: Colors.red,
+                                            size: 18,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -1038,9 +1377,70 @@ class _FeedPageState extends State<FeedPage> {
             ],
           ),
           const SizedBox(height: 10),
-          if (isMyComment)
-            Row(
-              children: [
+          Row(
+            children: [
+              InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  final TextEditingController replyController =
+                      TextEditingController();
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Yanıtla'),
+                      content: TextField(
+                        controller: replyController,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          hintText: 'Yanıtınızı yazın',
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('İptal'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () async {
+                            final replyText = replyController.text.trim();
+                            if (replyText.isNotEmpty) {
+                              final recipientId =
+                                  (doc.data() as Map?)?['userId']?.toString() ??
+                                  '';
+                              await _addReply(
+                                postId,
+                                doc.id,
+                                replyText,
+                                recipientId,
+                              );
+                              if (mounted) Navigator.pop(context);
+                            }
+                          },
+                          child: const Text('Gönder'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.reply, size: 18, color: Colors.blue),
+                      SizedBox(width: 6),
+                      Text(
+                        'Yanıtla',
+                        style: TextStyle(color: Colors.blue, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              if (isMyComment) ...[
                 InkWell(
                   borderRadius: BorderRadius.circular(12),
                   onTap: () => _editComment(postId, doc.id, commentText),
@@ -1083,7 +1483,8 @@ class _FeedPageState extends State<FeedPage> {
                   ),
                 ),
               ],
-            ),
+            ],
+          ),
         ],
       ),
     );

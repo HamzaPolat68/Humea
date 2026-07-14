@@ -637,7 +637,11 @@ class _HomePageState extends State<HomePage> {
                             "Hüzünlü",
                           ),
                           const SizedBox(width: 12),
-                          _buildMoodIcon(const Color(0xFFCFD8DC), "🤔", "Nötr"),
+                          _buildMoodIcon(
+                            const Color(0xFFCFD8DC),
+                            "🤔",
+                            "Nötr/Düşünceli",
+                          ),
                           const SizedBox(width: 12),
                           _buildMoodIcon(
                             const Color(0xFFFF9800),
@@ -660,7 +664,7 @@ class _HomePageState extends State<HomePage> {
                           _buildMoodIcon(
                             const Color(0xFFF44336),
                             "😰",
-                            "Kaygılı",
+                            "Çok Kaygılı",
                           ),
                         ],
                       ),
@@ -708,11 +712,11 @@ class _HomePageState extends State<HomePage> {
                           borderRadius: BorderRadius.circular(30),
                         ),
                         child: const Text(
-                          "Detay Ekle & Kaydet",
+                          "Detay Ekle",
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
-                            fontSize: 18,
+                            fontSize: 25,
                           ),
                         ),
                       ),

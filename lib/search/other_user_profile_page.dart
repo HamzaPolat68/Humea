@@ -196,10 +196,11 @@ class OtherUserProfilePage extends StatelessWidget {
                     );
                   }
                   List<FlSpot> spots = _getWeeklySpots(snapshot.data!.docs);
-                  if (spots.isEmpty)
+                  if (spots.isEmpty) {
                     return const Center(
                       child: Text("Bu haftaya ait veri yok."),
                     );
+                  }
 
                   return LineChart(
                     LineChartData(
