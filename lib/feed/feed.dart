@@ -4,6 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:humea/models/post_model.dart';
+import 'package:humea/search/other_user_profile_page.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/gestures.dart';
 
 String readSafeStringField(
   Object? data,
@@ -39,6 +42,95 @@ String? extractFirstUrl(String input) {
   } catch (_) {
     return null;
   }
+}
+
+Future<void> _launchUrl(String url) async {
+  String fixedUrl = url;
+  if (!fixedUrl.startsWith('http://') && !fixedUrl.startsWith('https://')) {
+    fixedUrl = 'https://$fixedUrl';
+  }
+  final uri = Uri.tryParse(fixedUrl);
+  if (uri == null) return;
+  if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    debugPrint('Link açılamadı: $fixedUrl');
+  }
+}
+
+// Metindeki linkleri tıklanabilir yapan RichText widget'ı üretir.
+Widget buildLinkifiedText(
+  String text, {
+  TextStyle? style,
+  TextStyle? linkStyle,
+}) {
+  final RegExp urlRegex = RegExp(r'(https?:\/\/[^\s]+|www\.[^\s]+)');
+  final List<InlineSpan> spans = [];
+  int lastEnd = 0;
+
+  for (final match in urlRegex.allMatches(text)) {
+    if (match.start > lastEnd) {
+      spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
+    }
+
+    final String url = match.group(0)!;
+    spans.add(
+      TextSpan(
+        text: url,
+        style:
+            linkStyle ??
+            const TextStyle(
+              color: Colors.blue,
+              decoration: TextDecoration.underline,
+            ),
+        recognizer: TapGestureRecognizer()..onTap = () => _launchUrl(url),
+      ),
+    );
+
+    lastEnd = match.end;
+  }
+
+  if (lastEnd < text.length) {
+    spans.add(TextSpan(text: text.substring(lastEnd)));
+  }
+
+  return RichText(
+    text: TextSpan(
+      style: style ?? const TextStyle(color: Colors.black),
+      children: spans,
+    ),
+  );
+}
+
+Map<String, dynamic> buildNotificationPayload({
+  required String recipientId,
+  required String senderId,
+  required String senderName,
+  required String type,
+  required String postId,
+  String? commentId,
+  String? replyId,
+  String? parentReplyId,
+}) {
+  final payload = <String, dynamic>{
+    'recipientId': recipientId,
+    'senderId': senderId,
+    'senderName': senderName,
+    'type': type,
+    'postId': postId,
+    'isRead': false,
+    'timestamp': FieldValue.serverTimestamp(),
+  };
+
+  if (commentId != null && commentId.isNotEmpty) {
+    payload['commentId'] = commentId;
+  }
+  if (replyId != null && replyId.isNotEmpty) {
+    payload['replyId'] = replyId;
+  }
+  if (parentReplyId != null && parentReplyId.isNotEmpty) {
+    payload['parentReplyId'] = parentReplyId;
+  }
+
+  return payload;
 }
 
 class FeedPage extends StatefulWidget {
@@ -322,6 +414,29 @@ class _FeedPageState extends State<FeedPage> {
     );
   }
 
+  void _openUserProfile(
+    BuildContext context, {
+    required String userId,
+    required String userName,
+    required String userImage,
+  }) {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId.isEmpty || userId == currentUserId) {
+      return; // kendi profiline gitmesin
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => OtherUserProfilePage(
+          targetUserId: userId,
+          targetUserName: userName,
+          targetPhotoUrl: userImage,
+        ),
+      ),
+    );
+  }
+
   // TARİH FORMATLAMA FONKSİYONU (Paketsiz Türkçe Format)
   String _formatDate(DateTime dateTime) {
     final List<String> months = [
@@ -346,6 +461,22 @@ class _FeedPageState extends State<FeedPage> {
     final String minute = dateTime.minute.toString().padLeft(2, '0');
 
     return "$day $month $year - $hour:$minute";
+  }
+
+  String? _resolveDisplayUserImage({
+    required String userId,
+    required String fallbackImage,
+  }) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null && currentUser.uid == userId) {
+      final liveImage = currentUser.photoURL?.trim();
+      if (liveImage != null && liveImage.isNotEmpty) {
+        return liveImage;
+      }
+    }
+
+    final trimmedFallback = fallbackImage.trim();
+    return trimmedFallback.isNotEmpty ? trimmedFallback : null;
   }
 
   @override
@@ -429,7 +560,13 @@ class _FeedPageState extends State<FeedPage> {
       "DEBUG - Post ID: ${post.id} - User Image Değeri: '${post.userImage}'",
     );
 
-    final String? postImageUrl = extractFirstUrl(post.userImage);
+    final String? effectivePostImage = _resolveDisplayUserImage(
+      userId: post.userId,
+      fallbackImage: post.userImage,
+    );
+    final String? postImageUrl = effectivePostImage != null
+        ? extractFirstUrl(effectivePostImage)
+        : null;
 
     return Container(
       key: key,
@@ -455,48 +592,66 @@ class _FeedPageState extends State<FeedPage> {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
-                ),
-                child: CircleAvatar(
-                  radius: 20,
-                  // backgroundImage için ternary operatörü kullanarak mantığı kuruyoruz
-                  backgroundImage: post.userImage.isNotEmpty
-                      ? (postImageUrl != null
-                            ? NetworkImage(postImageUrl) as ImageProvider
-                            : FileImage(File(post.userImage)) as ImageProvider)
-                      : null,
-
-                  // Eğer hiç resim yoksa ismin baş harfini göster
-                  child: post.userImage.isEmpty
-                      ? Text(post.userName[0].toUpperCase())
-                      : null,
-                ),
-              ),
-              const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      post.userName,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openUserProfile(
+                    context,
+                    userId: post.userId,
+                    userName: post.userName,
+                    userImage: post.userImage,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.blue.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: CircleAvatar(
+                          radius: 20,
+                          backgroundImage: effectivePostImage != null
+                              ? (postImageUrl != null
+                                    ? NetworkImage(postImageUrl)
+                                          as ImageProvider
+                                    : FileImage(File(effectivePostImage))
+                                          as ImageProvider)
+                              : null,
+                          child: effectivePostImage == null
+                              ? Text(post.userName[0].toUpperCase())
+                              : null,
+                        ),
                       ),
-                    ),
-                    Text(
-                      _formatDate(post.timestamp),
-                      style: TextStyle(fontSize: 11, color: Colors.grey[400]),
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              post.userName,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            Text(
+                              _formatDate(post.timestamp),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[400],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-
               // 3. Butonlar (SABİT GENİŞLİKLİ - Taşmayı tamamen engeller)
               if (isMyPost)
                 Row(
@@ -557,7 +712,7 @@ class _FeedPageState extends State<FeedPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
+          buildLinkifiedText(
             post.note,
             style: TextStyle(
               fontSize: 14,
@@ -565,6 +720,44 @@ class _FeedPageState extends State<FeedPage> {
               height: 1.4,
             ),
           ),
+
+          // PAYLAŞILAN FOTOĞRAF (varsa göster)
+          if (post.imageUrl != null && post.imageUrl!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.network(
+                post.imageUrl!,
+                width: double.infinity,
+                height: 250,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Container(
+                    height: 250,
+                    alignment: Alignment.center,
+                    color: Colors.grey[200],
+                    child: CircularProgressIndicator(
+                      value: loadingProgress.expectedTotalBytes != null
+                          ? loadingProgress.cumulativeBytesLoaded /
+                                loadingProgress.expectedTotalBytes!
+                          : null,
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) => Container(
+                  height: 200,
+                  alignment: Alignment.center,
+                  color: Colors.grey[200],
+                  child: const Icon(
+                    Icons.broken_image,
+                    color: Colors.grey,
+                    size: 40,
+                  ),
+                ),
+              ),
+            ),
+          ],
 
           const SizedBox(height: 16),
           // Beğeni Barı
@@ -811,6 +1004,49 @@ class _FeedPageState extends State<FeedPage> {
     );
   }
 
+  Future<void> _showReplyDialog({
+    required String postId,
+    required String commentId,
+    required String recipientId,
+    String? parentReplyId,
+  }) async {
+    final TextEditingController replyController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Yanıtla'),
+        content: TextField(
+          controller: replyController,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Yanıtınızı yazın'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final replyText = replyController.text.trim();
+              if (replyText.isEmpty) return;
+
+              await _addReply(
+                postId,
+                commentId,
+                replyText,
+                recipientId,
+                parentReplyId: parentReplyId,
+              );
+              if (mounted) Navigator.pop(context);
+            },
+            child: const Text('Gönder'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _addComment(
     String postId,
     String text,
@@ -843,15 +1079,17 @@ class _FeedPageState extends State<FeedPage> {
       await postRef.update({'commentsCount': FieldValue.increment(1)});
 
       if (recipientUserId != user.uid) {
-        await FirebaseFirestore.instance.collection('notifications').add({
-          'recipientId': recipientUserId,
-          'senderId': user.uid,
-          'senderName': user.displayName ?? 'Anonim',
-          'type': 'comment',
-          'postId': postId,
-          'isRead': false,
-          'timestamp': FieldValue.serverTimestamp(),
-        });
+        await FirebaseFirestore.instance
+            .collection('notifications')
+            .add(
+              buildNotificationPayload(
+                recipientId: recipientUserId,
+                senderId: user.uid,
+                senderName: user.displayName ?? 'Anonim',
+                type: 'comment',
+                postId: postId,
+              ),
+            );
       }
     } catch (e) {
       debugPrint('Yorum ekleme hatası: $e');
@@ -862,8 +1100,9 @@ class _FeedPageState extends State<FeedPage> {
     String postId,
     String commentId,
     String text,
-    String recipientUserId,
-  ) async {
+    String recipientUserId, {
+    String? parentReplyId,
+  }) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
@@ -879,6 +1118,7 @@ class _FeedPageState extends State<FeedPage> {
         // Use local timestamp for immediate visibility in the UI
         'timestamp': Timestamp.now(),
         'likesCount': 0,
+        'parentReplyId': parentReplyId ?? '',
       };
 
       final commentRef = FirebaseFirestore.instance
@@ -887,20 +1127,26 @@ class _FeedPageState extends State<FeedPage> {
           .collection('comments')
           .doc(commentId);
 
-      await commentRef.collection('replies').add(replyData);
+      final replyDocRef = await commentRef.collection('replies').add(replyData);
       await commentRef.update({'repliesCount': FieldValue.increment(1)});
 
       if (recipientUserId != user.uid) {
-        await FirebaseFirestore.instance.collection('notifications').add({
-          'recipientId': recipientUserId,
-          'senderId': user.uid,
-          'senderName': user.displayName ?? 'Anonim',
-          'type': 'reply',
-          'postId': postId,
-          'commentId': commentId,
-          'isRead': false,
-          'timestamp': FieldValue.serverTimestamp(),
-        });
+        await FirebaseFirestore.instance
+            .collection('notifications')
+            .add(
+              buildNotificationPayload(
+                recipientId: recipientUserId,
+                senderId: user.uid,
+                senderName: user.displayName ?? 'Anonim',
+                type: parentReplyId != null && parentReplyId.isNotEmpty
+                    ? 'reply_reply'
+                    : 'reply',
+                postId: postId,
+                commentId: commentId,
+                replyId: replyDocRef.id,
+                parentReplyId: parentReplyId,
+              ),
+            );
       }
     } catch (e) {
       debugPrint('Yanıt ekleme hatası: $e');
@@ -1091,6 +1337,14 @@ class _FeedPageState extends State<FeedPage> {
     final Timestamp? timestamp = (commentData is Map)
         ? (commentData['timestamp'] as Timestamp?)
         : null;
+    final String commentOwnerId = readSafeStringField(commentData, 'userId');
+    final String? effectiveCommentImage = _resolveDisplayUserImage(
+      userId: commentOwnerId,
+      fallbackImage: userImage,
+    );
+    final String? commentImageUrl = effectiveCommentImage != null
+        ? extractFirstUrl(effectiveCommentImage)
+        : null;
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
@@ -1115,14 +1369,14 @@ class _FeedPageState extends State<FeedPage> {
               CircleAvatar(
                 radius: 18,
                 backgroundColor: Colors.blueGrey[50],
-                // Support markdown-wrapped or raw URLs in userImage
-                backgroundImage: userImage.isNotEmpty
-                    ? (extractFirstUrl(userImage) != null
-                          ? NetworkImage(extractFirstUrl(userImage)!)
-                                as ImageProvider
-                          : FileImage(File(userImage)))
+                backgroundImage: effectiveCommentImage != null
+                    ? (commentImageUrl != null
+                          ? NetworkImage(commentImageUrl) as ImageProvider
+                          : FileImage(File(effectiveCommentImage))
+                                as ImageProvider)
                     : null,
-                child: userImage.isEmpty
+
+                child: effectiveCommentImage == null
                     ? Text(
                         userName.isNotEmpty
                             ? userName.substring(0, 1).toUpperCase()
@@ -1146,11 +1400,22 @@ class _FeedPageState extends State<FeedPage> {
                             crossAxisAlignment: WrapCrossAlignment.center,
                             spacing: 6,
                             children: [
-                              Text(
-                                userName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
+                              GestureDetector(
+                                onTap: () => _openUserProfile(
+                                  context,
+                                  userId: readSafeStringField(
+                                    commentData,
+                                    'userId',
+                                  ),
+                                  userName: userName,
+                                  userImage: userImage,
+                                ),
+                                child: Text(
+                                  userName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ),
                               Text(
@@ -1168,7 +1433,10 @@ class _FeedPageState extends State<FeedPage> {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Text(commentText, style: const TextStyle(fontSize: 14)),
+                    buildLinkifiedText(
+                      commentText,
+                      style: const TextStyle(fontSize: 14),
+                    ),
 
                     const SizedBox(height: 8),
                     // Replies (yorum yanıtları) görüntüleme
@@ -1209,18 +1477,25 @@ class _FeedPageState extends State<FeedPage> {
                               reply,
                               'userImage',
                             );
-                            final String? rImageUrl = extractFirstUrl(rUserImg);
+                            final String rOwnerId = readSafeStringField(
+                              reply,
+                              'userId',
+                            );
+                            final String? effectiveReplyImage =
+                                _resolveDisplayUserImage(
+                                  userId: rOwnerId,
+                                  fallbackImage: rUserImg,
+                                );
+                            final String? rImageUrl =
+                                effectiveReplyImage != null
+                                ? extractFirstUrl(effectiveReplyImage)
+                                : null;
                             final int rLikesCount = readSafeIntField(
                               reply,
                               'likesCount',
                             );
                             final bool isReplyLiked = _likedReplyIds.contains(
                               replyDoc.id,
-                            );
-
-                            final String rOwnerId = readSafeStringField(
-                              reply,
-                              'userId',
                             );
                             final bool isMyReply =
                                 rOwnerId.isNotEmpty &&
@@ -1242,13 +1517,15 @@ class _FeedPageState extends State<FeedPage> {
                                 children: [
                                   CircleAvatar(
                                     radius: 12,
-                                    backgroundImage: rUserImg.isNotEmpty
+                                    backgroundImage: effectiveReplyImage != null
                                         ? (rImageUrl != null
                                                   ? NetworkImage(rImageUrl)
-                                                  : FileImage(File(rUserImg)))
+                                                  : FileImage(
+                                                      File(effectiveReplyImage),
+                                                    ))
                                               as ImageProvider
                                         : null,
-                                    child: rUserImg.isEmpty
+                                    child: effectiveReplyImage == null
                                         ? Text(
                                             rUserName.isNotEmpty
                                                 ? rUserName[0].toUpperCase()
@@ -1284,6 +1561,120 @@ class _FeedPageState extends State<FeedPage> {
                                             color: Colors.grey,
                                             fontSize: 10,
                                           ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        InkWell(
+                                          onTap: () => _showReplyDialog(
+                                            postId: postId,
+                                            commentId: doc.id,
+                                            recipientId: rOwnerId,
+                                            parentReplyId: replyDoc.id,
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: const [
+                                              Icon(
+                                                Icons.reply,
+                                                size: 14,
+                                                color: Colors.blue,
+                                              ),
+                                              SizedBox(width: 4),
+                                              Text(
+                                                'Yanıtla',
+                                                style: TextStyle(
+                                                  color: Colors.blue,
+                                                  fontSize: 11,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        StreamBuilder<QuerySnapshot>(
+                                          stream: FirebaseFirestore.instance
+                                              .collection('posts')
+                                              .doc(postId)
+                                              .collection('comments')
+                                              .doc(doc.id)
+                                              .collection('replies')
+                                              .where(
+                                                'parentReplyId',
+                                                isEqualTo: replyDoc.id,
+                                              )
+                                              .snapshots(),
+                                          builder: (context, childReplySnap) {
+                                            if (!childReplySnap.hasData ||
+                                                childReplySnap
+                                                    .data!
+                                                    .docs
+                                                    .isEmpty) {
+                                              return const SizedBox.shrink();
+                                            }
+
+                                            return Padding(
+                                              padding: const EdgeInsets.only(
+                                                top: 6,
+                                                left: 6,
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: childReplySnap.data!.docs.map((
+                                                  childReplyDoc,
+                                                ) {
+                                                  final childReply =
+                                                      childReplyDoc.data()
+                                                          as Map<
+                                                            String,
+                                                            dynamic
+                                                          >;
+                                                  final childUserName =
+                                                      readSafeStringField(
+                                                        childReply,
+                                                        'userName',
+                                                        fallback: 'Anonim',
+                                                      );
+                                                  final childText =
+                                                      readSafeStringField(
+                                                        childReply,
+                                                        'text',
+                                                      );
+                                                  return Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          bottom: 4,
+                                                        ),
+                                                    child: Row(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        const Icon(
+                                                          Icons
+                                                              .subdirectory_arrow_right,
+                                                          size: 12,
+                                                          color:
+                                                              Colors.blueGrey,
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 4,
+                                                        ),
+                                                        Expanded(
+                                                          child: Text(
+                                                            '$childUserName: $childText',
+                                                            style: TextStyle(
+                                                              fontSize: 11,
+                                                              color: Colors
+                                                                  .blueGrey[700],
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                }).toList(),
+                                              ),
+                                            );
+                                          },
                                         ),
                                       ],
                                     ),
@@ -1381,47 +1772,11 @@ class _FeedPageState extends State<FeedPage> {
             children: [
               InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: () {
-                  final TextEditingController replyController =
-                      TextEditingController();
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Yanıtla'),
-                      content: TextField(
-                        controller: replyController,
-                        autofocus: true,
-                        decoration: const InputDecoration(
-                          hintText: 'Yanıtınızı yazın',
-                        ),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('İptal'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () async {
-                            final replyText = replyController.text.trim();
-                            if (replyText.isNotEmpty) {
-                              final recipientId =
-                                  (doc.data() as Map?)?['userId']?.toString() ??
-                                  '';
-                              await _addReply(
-                                postId,
-                                doc.id,
-                                replyText,
-                                recipientId,
-                              );
-                              if (mounted) Navigator.pop(context);
-                            }
-                          },
-                          child: const Text('Gönder'),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                onTap: () => _showReplyDialog(
+                  postId: postId,
+                  commentId: doc.id,
+                  recipientId: readSafeStringField(commentData, 'userId'),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,

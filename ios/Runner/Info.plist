@@ -57,6 +57,10 @@
 
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
+    <key>NSCameraUsageDescription</key>
+    <string>Fotoğraf çekmek için kameraya erişim gerekiyor</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Galeriye erişim gerekiyor</string>
     <key>UILaunchStoryboardName</key>
     <string>LaunchScreen</string>
     <key>UIMainStoryboardFile</key>

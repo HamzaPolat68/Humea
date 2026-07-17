@@ -137,19 +137,50 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // Akıştaki tüm eski postların profil resmini bulutta günceller
+  // Akıştaki eski gönderi, yorum ve yanıtların profil resmini günceller
   Future<void> _syncProfileImageWithFirestore(String newImageUrl) async {
     try {
-      final userPosts = await FirebaseFirestore.instance
+      final userId = _user?.uid ?? "";
+      if (userId.isEmpty) return;
+
+      final postsSnapshot = await FirebaseFirestore.instance
           .collection('posts')
-          .where('userId', isEqualTo: _user?.uid ?? "")
           .get();
 
-      final batch = FirebaseFirestore.instance.batch();
-      for (var doc in userPosts.docs) {
-        batch.update(doc.reference, {'userImage': newImageUrl});
+      for (final postDoc in postsSnapshot.docs) {
+        final postData = postDoc.data();
+        if (postData['userId']?.toString() == userId) {
+          await postDoc.reference.update({'userImage': newImageUrl});
+        }
+
+        final commentsSnapshot = await FirebaseFirestore.instance
+            .collection('posts')
+            .doc(postDoc.id)
+            .collection('comments')
+            .get();
+
+        for (final commentDoc in commentsSnapshot.docs) {
+          final commentData = commentDoc.data();
+          if (commentData['userId']?.toString() == userId) {
+            await commentDoc.reference.update({'userImage': newImageUrl});
+          }
+
+          final repliesSnapshot = await FirebaseFirestore.instance
+              .collection('posts')
+              .doc(postDoc.id)
+              .collection('comments')
+              .doc(commentDoc.id)
+              .collection('replies')
+              .get();
+
+          for (final replyDoc in repliesSnapshot.docs) {
+            final replyData = replyDoc.data();
+            if (replyData['userId']?.toString() == userId) {
+              await replyDoc.reference.update({'userImage': newImageUrl});
+            }
+          }
+        }
       }
-      await batch.commit();
     } catch (e) {
       debugPrint("Akış resmi senkronizasyon hatası: $e");
     }

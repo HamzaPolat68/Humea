@@ -8,12 +8,15 @@ class Post {
   final String moodEmoji;
   final String moodTitle;
   final String note;
+  final String? imageUrl;
+  final List<String> mentions;
   final DateTime timestamp;
   final int likes;
   final int commentsCount; // Yeni: Yorum sayısı
   final List<Map<String, dynamic>> likesList; // Yeni: Beğenenlerin ID listesi
 
   Post({
+    required this.imageUrl,
     required this.id,
     required this.userId,
     required this.userName,
@@ -21,6 +24,7 @@ class Post {
     required this.moodEmoji,
     required this.moodTitle,
     required this.note,
+    required this.mentions,
     required this.timestamp,
     required this.likes,
     required this.commentsCount,
@@ -36,6 +40,12 @@ class Post {
       moodEmoji: json['moodEmoji'] ?? '🙂',
       moodTitle: json['moodTitle'] ?? 'Normal',
       note: json['note'] ?? '',
+      imageUrl: json['imageUrl'],
+      mentions: List<String>.from(
+        (json['mentions'] as List<dynamic>? ?? []).map(
+          (mention) => mention.toString().toLowerCase(),
+        ),
+      ),
       likes: json['likes'] ?? 0,
       commentsCount: json['commentsCount'] ?? 0, // Yeni: Yorum sayısı
       // Firebase'den gelen listeyi al, eğer yoksa boş liste döndür
@@ -80,6 +90,8 @@ class Post {
     'moodEmoji': moodEmoji,
     'moodTitle': moodTitle,
     'note': note,
+    'imageUrl': imageUrl,
+    'mentions': mentions,
     'likes': likes,
     'likesList': likesList, // Firestore'a kaydederken ekle
     'timestamp': FieldValue.serverTimestamp(),

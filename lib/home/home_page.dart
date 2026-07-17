@@ -12,6 +12,7 @@ import 'package:humea/ai/ai.dart';
 import 'dart:io';
 import 'package:humea/search/user_search_page.dart';
 import 'package:humea/services/notification_service.dart';
+import 'package:humea/notifications/notifications_page.dart';
 
 // --- VERİ MODELİ ---
 class MoodEntry {
@@ -30,7 +31,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   String _selectedEmoji = "🙂";
-  Color _selectedColor = Colors.lightBlue[300]!;
+  Color _selectedColor = const Color(0xFF2196F3);
 
   // KULLANICININ TÜM ZAMANLARDA GİRDİĞİ HAM VERİ LİSTESİ
   List<MoodEntry> _allMoodEntries = [];
@@ -489,6 +490,8 @@ class _HomePageState extends State<HomePage> {
       case 3:
         return const SafeArea(child: AiRecommendationsScreen());
       case 4:
+        return const SafeArea(child: NotificationsPage());
+      case 5:
         return const SafeArea(child: ProfilePage());
       default:
         return _buildHomeScreenBody();
@@ -764,6 +767,10 @@ class _HomePageState extends State<HomePage> {
           BottomNavigationBarItem(
             icon: Icon(Icons.smart_toy_outlined),
             label: 'AI',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.notifications_none),
+            label: 'Bildirimler',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
