@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'dart:convert';
 
 class ChatMessage {
   final String text;
@@ -34,6 +33,71 @@ class _AiRecommendationsScreenState extends State<AiRecommendationsScreen> {
 
   final String _apiKey = dotenv.env['GEMINI_API_KEY'] ?? "";
 
+  // Skor (int) -> emoji/etiket/AI bağlamı haritası.
+  // home_page.dart'taki _emojiToScore ile birebir eşleşir (yuvarlanmış halleriyle).
+  static final Map<int, Map<String, String>> _scoreToMoodInfo = {
+    10: {
+      "emoji": "😍",
+      "label": "Harika",
+      "context":
+          "Kullanıcı bugün kendini harika (😍) hissettiğini bildirdi. Bu yüksek frekansı analiz et ve konuşmayı başlat.",
+    },
+    9: {
+      "emoji": "🤩",
+      "label": "Heyecanlı",
+      "context":
+          "Kullanıcı bugün heyecanlı (🤩) hissettiğini bildirdi. Bu enerjiyi yönlendirecek bir konuşma başlat.",
+    },
+    8: {
+      "emoji": "🙂",
+      "label": "İyi/Mutlu",
+      "context":
+          "Kullanıcı bugün iyi/mutlu (🙂) hissettiğini bildirdi. Dengeli bir konuşma başlat.",
+    },
+    7: {
+      "emoji": "😊",
+      "label": "Huzurlu/Pozitif",
+      "context":
+          "Kullanıcı bugün huzurlu ve pozitif (😊) hissettiğini bildirdi. Bu hali pekiştirecek bir konuşma başlat.",
+    },
+    6: {
+      "emoji": "😞",
+      "label": "Hüzünlü",
+      "context":
+          "Kullanıcı bugün hüzünlü (😞) hissettiğini bildirdi. Şefkatli, yargılamayan bir giriş yap.",
+    },
+    5: {
+      "emoji": "🤔",
+      "label": "Nötr/Düşünceli",
+      "context":
+          "Kullanıcı bugün nötr/düşünceli (🤔) hissettiğini bildirdi. Derinlemesine bir öz-farkındalık sohbeti başlat.",
+    },
+    4: {
+      "emoji": "😡",
+      "label": "Öfkeli",
+      "context":
+          "Kullanıcı bugün öfkeli (😡) hissettiğini bildirdi. Amigdala regülasyonu odaklı sakinleştirici bir giriş yap.",
+    },
+    3: {
+      "emoji": "😟",
+      "label": "Endişeli",
+      "context":
+          "Kullanıcı bugün endişeli (😟) hissettiğini bildirdi. Güven verici, topraklayıcı bir giriş yap.",
+    },
+    2: {
+      "emoji": "💤",
+      "label": "Yorgun",
+      "context":
+          "Kullanıcı bugün yorgun (💤) hissettiğini bildirdi. Onu yormayacak, zihinsel deşarja yönelik bir giriş yap.",
+    },
+    1: {
+      "emoji": "😰",
+      "label": "Çok Kaygılı",
+      "context":
+          "Kullanıcı bugün çok kaygılı (😰) hissettiğini bildirdi. Amigdala regülasyonu ve nefes odaklı sakinleştirici bir giriş yap.",
+    },
+  };
+
   @override
   void initState() {
     super.initState();
@@ -55,57 +119,61 @@ class _AiRecommendationsScreenState extends State<AiRecommendationsScreen> {
     // Boş bir sohbet oturumu başlatıyoruz (Geçmişi hafızada tutması için)
     _chatSession = _model.startChat();
 
-    // 2. Cihaz hafızasından kullanıcının o günkü modunu okuyoruz
-    final prefs = await SharedPreferences.getInstance();
+    // 2. Firestore'dan kullanıcının o günkü mood kayıtlarını çekiyoruz
+    // (Moodlar sadece Firestore'a yazılıyor, cihaz hafızasında tutulmuyor)
+    //
+    // NOT: home_page.dart'taki ile AYNI sorgu desenini kullanıyoruz
+    // (userId eşitliği + date'e göre artan sıralama) çünkü bu sorgu için
+    // Firestore index'i zaten mevcut ve çalışıyor. Aralık filtresi (where date
+    // between X and Y) + orderBy kombinasyonu farklı bir composite index
+    // gerektirebilir ve o index yoksa sorgu sessizce hata verir. Bu yüzden
+    // bugünün kaydını burada, tüm kayıtları çektikten sonra kod tarafında
+    // filtreliyoruz.
     final user = FirebaseAuth.instance.currentUser;
-    final String key = user != null
-        ? 'user_moods_history_${user.uid}'
-        : 'user_moods_history_guest';
-    final String? cachedData = prefs.getString(key);
-
-    double todayScore = -1.0;
+    double? todayScore;
     DateTime now = DateTime.now();
 
-    if (cachedData != null) {
-      final List<dynamic> jsonList = jsonDecode(cachedData);
-      for (var item in jsonList) {
-        DateTime entryDate = DateTime.parse(item['date']);
-        if (entryDate.year == now.year &&
-            entryDate.month == now.month &&
-            entryDate.day == now.day) {
-          todayScore = (item['score'] as num).toDouble();
-          break;
+    if (user != null) {
+      try {
+        final snapshot = await FirebaseFirestore.instance
+            .collection('moods')
+            .where('userId', isEqualTo: user.uid)
+            .orderBy('date', descending: false)
+            .get();
+
+        for (var doc in snapshot.docs) {
+          final data = doc.data();
+          final entryDate = (data['date'] as Timestamp).toDate();
+          if (entryDate.year == now.year &&
+              entryDate.month == now.month &&
+              entryDate.day == now.day) {
+            // Aynı gün birden fazla kayıt varsa en sonuncusunu (en güncelini) al
+            todayScore = (data['score'] as num).toDouble();
+          }
         }
+      } catch (e) {
+        debugPrint('Bugünün mood verisi çekilirken hata: $e');
       }
     }
 
-    // 3. Mod Puanını Haritalandırma
-    String moodPromptContext = "";
+    // 3. Skoru mood bilgisine çevir (int'e yuvarlayarak harita anahtarıyla eşleştir)
+    final moodInfo = todayScore != null
+        ? _scoreToMoodInfo[todayScore.round()]
+        : null;
+
+    final String moodPromptContext;
+    if (moodInfo != null) {
+      moodPromptContext = moodInfo['context']!;
+    } else {
+      moodPromptContext =
+          "Kullanıcı bugün henüz bir duygu durumu kaydetmedi. Genel bir kontrol ve derin bir hal hatır sorma ile sohbete başla.";
+    }
+
     setState(() {
-      if (todayScore == 5.0) {
-        _detectedMoodSummary = "Çok İyi (😍)";
-        moodPromptContext =
-            "Kullanıcı bugün çok iyi (😍) hissettiğini bildirdi. Bu yüksek frekansı analiz et ve konuşmayı başlat.";
-      } else if (todayScore == 4.0) {
-        _detectedMoodSummary = "Dengeli (🙂)";
-        moodPromptContext =
-            "Kullanıcı bugün dengeli/stabil (🙂) hissettiğini bildirdi. Mantıklı kararlar aşamasında, buna uygun konuşmayı başlat.";
-      } else if (todayScore == 3.0) {
-        _detectedMoodSummary = "Düşük Enerji (😞)";
-        moodPromptContext =
-            "Kullanıcı bugün düşük enerjili ve buruk (😞) hissettiğini bildirdi. Bilişsel yükünü azaltacak bir konuşma başlat.";
-      } else if (todayScore == 2.0) {
-        _detectedMoodSummary = "Yüksek Gerilim (😡)";
-        moodPromptContext =
-            "Kullanıcı bugün öfkeli ve yüksek stresli (😡) hissettiğini bildirdi. Amigdala regülasyonu odaklı sakinleştirici bir giriş yap.";
-      } else if (todayScore == 1.0) {
-        _detectedMoodSummary = "Tükenmişlik (💤)";
-        moodPromptContext =
-            "Kullanıcı bugün bitkin ve tükenmiş (💤) hissettiğini bildirdi. Onu yormayacak, zihinsel deşarja yönelik bir giriş yap.";
+      if (moodInfo != null) {
+        _detectedMoodSummary = "${moodInfo['label']} (${moodInfo['emoji']})";
       } else {
         _detectedMoodSummary = "Veri Girilmedi";
-        moodPromptContext =
-            "Kullanıcı bugün henüz bir duygu durumu kaydetmedi. Genel bir kontrol ve derin bir hal hatır sorma ile sohbete başla.";
       }
     });
 
