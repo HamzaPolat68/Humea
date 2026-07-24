@@ -56,7 +56,17 @@ exports.onNotificationCreated = onDocumentCreated("notifications/{notificationId
 // ---------------------------------------------------
 async function postBirthdayMessages() {
     const now = new Date();
-    const monthDay = `${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Europe/Istanbul",
+        month: "2-digit",
+        day: "2-digit",
+    });
+
+    const parts = formatter.formatToParts(now);
+    const month = parts.find(p => p.type === "month").value;
+    const day = parts.find(p => p.type === "day").value;
+    const monthDay = `${month}-${day}`;
 
     const snapshot = await db
         .collection("users")
@@ -91,7 +101,7 @@ async function postBirthdayMessages() {
 
 exports.birthdayFeedPost = onSchedule(
     {
-        schedule: "0 0,8,16,21, * * *",
+        schedule: "0 0,8,16,21 * * *",
         timeZone: "Europe/Istanbul",
     },
     async () => {

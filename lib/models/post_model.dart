@@ -9,14 +9,16 @@ class Post {
   final String moodTitle;
   final String note;
   final String? imageUrl;
+  final String? videoUrl;
   final List<String> mentions;
   final DateTime timestamp;
   final int likes;
-  final int commentsCount; // Yeni: Yorum sayısı
-  final List<Map<String, dynamic>> likesList; // Yeni: Beğenenlerin ID listesi
+  final int commentsCount;
+  final List<Map<String, dynamic>> likesList;
 
   Post({
     required this.imageUrl,
+    this.videoUrl,
     required this.id,
     required this.userId,
     required this.userName,
@@ -41,14 +43,14 @@ class Post {
       moodTitle: json['moodTitle'] ?? 'Normal',
       note: json['note'] ?? '',
       imageUrl: json['imageUrl'],
+      videoUrl: json['videoUrl'],
       mentions: List<String>.from(
         (json['mentions'] as List<dynamic>? ?? []).map(
           (mention) => mention.toString().toLowerCase(),
         ),
       ),
       likes: json['likes'] ?? 0,
-      commentsCount: json['commentsCount'] ?? 0, // Yeni: Yorum sayısı
-      // Firebase'den gelen listeyi al, eğer yoksa boş liste döndür
+      commentsCount: json['commentsCount'] ?? 0,
       likesList: List<Map<String, dynamic>>.from(json['likesList'] ?? []),
       timestamp: _parseTimestamp(json['timestamp']),
     );
@@ -56,13 +58,9 @@ class Post {
 
   static DateTime _parseTimestamp(dynamic ts) {
     if (ts == null) return DateTime.now();
-    // If it's a Firestore Timestamp
     if (ts is Timestamp) return ts.toDate();
-    // If it's already a DateTime
     if (ts is DateTime) return ts;
-    // If it's milliseconds since epoch
     if (ts is int) return DateTime.fromMillisecondsSinceEpoch(ts);
-    // If it's a map with seconds/nanoseconds (possible when decoding JSON)
     if (ts is Map<String, dynamic>) {
       if (ts.containsKey('_seconds')) {
         final seconds = ts['_seconds'] as int? ?? 0;
@@ -79,7 +77,6 @@ class Post {
         );
       }
     }
-    // Fallback
     return DateTime.now();
   }
 
@@ -91,9 +88,10 @@ class Post {
     'moodTitle': moodTitle,
     'note': note,
     'imageUrl': imageUrl,
+    'videoUrl': videoUrl,
     'mentions': mentions,
     'likes': likes,
-    'likesList': likesList, // Firestore'a kaydederken ekle
+    'likesList': likesList,
     'timestamp': FieldValue.serverTimestamp(),
   };
 }

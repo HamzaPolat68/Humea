@@ -24,6 +24,7 @@ dependencies:
   google_generative_ai: ^0.4.7
   shared_preferences: ^2.5.5
   image_picker: ^1.2.2
+  video_player: ^2.11.1
   url_launcher: ^6.3.2
   font_awesome_flutter: ^10.7.0
   firebase_auth: ^6.4.0

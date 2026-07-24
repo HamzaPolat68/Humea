@@ -6,7 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:humea/features/auth/login_page.dart';
 import 'package:humea/mood/mood_chart_page.dart';
 import 'package:humea/profile/profile.dart';
-import 'package:humea/mood/note_page.dart';
+import 'package:humea/note/note_page.dart';
 import 'package:humea/feed/feed.dart';
 import 'package:humea/ai/ai.dart';
 import 'dart:io';
