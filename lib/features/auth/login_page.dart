@@ -94,19 +94,26 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _signInWithGoogle() async {
     try {
-      final dynamic googleSignIn = GoogleSignIn(scopes: ['email']);
+      // ⚠️ Firebase Console / Google Cloud Console üzerindeki "Web Client ID" bilgisini buraya yazın:
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        scopes: ['email'],
+        serverClientId:
+            '885686922988-u4g39no20kmdtreri7kn1akmbu5fdb61.apps.googleusercontent.com',
+      );
 
       await googleSignIn.signOut();
 
-      final dynamic googleUser = await googleSignIn.signIn();
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
 
-      if (googleUser == null) return; // Kullanıcı hesap seçmeden geri çıktıysa
+      if (googleUser == null)
+        return; // Kullanıcı seçim yapmadan pencereyi kapattıysa
 
-      final dynamic googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
 
       final OAuthCredential credential = GoogleAuthProvider.credential(
-        idToken: googleAuth.idToken as String?,
-        accessToken: googleAuth.accessToken as String?,
+        idToken: googleAuth.idToken,
+        accessToken: googleAuth.accessToken,
       );
 
       // Google ile Firebase Auth girişi yapılıyor
