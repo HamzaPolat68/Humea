@@ -164,7 +164,16 @@ class _LoginPageState extends State<LoginPage> {
                 'createdAt': FieldValue.serverTimestamp(),
               });
         }
-        await NotificationService.syncFcmTokenToFirestore(userId: user.uid);
+
+        // Notification senkronizasyonunu ayrı bir try-catch'e alıyoruz
+        // ki bildirim hatası giriş yapmayı engellemesin/çökertmesin:
+        try {
+          await NotificationService.syncFcmTokenToFirestore(userId: user.uid);
+        } catch (e) {
+          print(
+            "FCM Token alınamadı (Simülatörde veya bildirim izni yoksa normaldir): $e",
+          );
+        }
       }
 
       _showMessage("Google ile başarıyla giriş yapıldı!", Colors.green);
