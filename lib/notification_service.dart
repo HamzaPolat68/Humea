@@ -18,22 +18,31 @@ class NotificationService {
         return;
       }
 
-      // 2. iOS için APNs Token Kontrolü (Retry Mekanizmalı)
+      // 2. iOS Kontrolü
       if (Platform.isIOS) {
-        String? apnsToken = await messaging.getAPNSToken();
+        String? apnsToken;
 
-        // APNs token gelene kadar kısa aralıklarla dene (Maksimum ~5 saniye)
-        int retryCount = 0;
-        while (apnsToken == null && retryCount < 5) {
-          await Future.delayed(const Duration(seconds: 1));
+        // APNs token alma işlemini de try-catch içine alıyoruz
+        try {
           apnsToken = await messaging.getAPNSToken();
-          retryCount++;
+
+          int retryCount = 0;
+          while (apnsToken == null && retryCount < 3) {
+            await Future.delayed(const Duration(seconds: 1));
+            apnsToken = await messaging.getAPNSToken();
+            retryCount++;
+          }
+        } catch (e) {
+          // getAPNSToken() metodunun fırlattığı [firebase_messaging/apns-token-not-set] burada yakalanır
+          print(
+            "APNs Token alınırken hata yakalandı (Simülatör veya APNs yok): $e",
+          );
         }
 
-        // Eğer simülatördeyseniz veya APNs alınamadıysa dur
+        // Eğer APNs token gelmediyse FCM token istemeden fonksiyondan çık
         if (apnsToken == null) {
           print(
-            "APNs Token alınamadı (Simülatör veya APNs yapılandırma eksikliği). FCM pas geçiliyor.",
+            "APNs Token bulunamadı. Kayıt işlemine FCM olmadan devam ediliyor.",
           );
           return;
         }
@@ -44,16 +53,11 @@ class NotificationService {
 
       if (fcmToken != null) {
         print("FCM Token Başarıyla Alındı: $fcmToken");
-
-        // Firestore Güncellemesi:
-        // await FirebaseFirestore.instance
-        //     .collection('users')
-        //     .doc(userId)
-        //     .update({'fcmToken': fcmToken});
+        // Firestore Güncellemesi
       }
     } catch (e) {
-      // Olası bir [firebase_messaging/apns-token-not-set] veya ağ hatasını yakala
-      print("FCM Token alma/senkronize etme hatası: $e");
+      // Dışarıya hiçbir kırmızı hata uyarısı sızmaması için ana catch
+      print("NotificationService Genel Hata Yakalandı: $e");
     }
   }
 }
