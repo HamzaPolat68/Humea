@@ -24,22 +24,24 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 
 	<!-- Google Sign-In URL Schemes & OAuth Configurations -->
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<!-- REVERSED_CLIENT_ID (GoogleService-Info.plist dosyanızdaki değerle birebir aynı olmalı) -->
-				<string>com.googleusercontent.apps.885686922988-9ghv15k6bvuth3hcql8vg7ei9qj12r46</string>
-			</array>
-		</dict>
-	</array>
+	<!-- Google Sign-In URL Schemes & OAuth Configurations -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <!-- DÜZELTİLEN REVERSED CLIENT ID -->
+                <string>com.googleusercontent.apps.885686922988-6u8bfopavgk7a2ohuefs19qnothlffku</string>
+            </array>
+        </dict>
+    </array>
 
-	<!-- Google Sign-In Client ID (iOS Native SDK için) -->
-	<key>GIDClientID</key>
-	<string>885686922988-9ghv15k6bvuth3hcql8vg7ei9qj12r46.apps.googleusercontent.com</string>
+    <!-- Google Sign-In Client ID (iOS Native SDK için) -->
+    <key>GIDClientID</key>
+    <!-- DÜZELTİLEN CLIENT ID -->
+    <string>885686922988-6u8bfopavgk7a2ohuefs19qnothlffku.apps.googleusercontent.com</string>
 
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
