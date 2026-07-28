@@ -12,7 +12,7 @@ import 'package:intl/date_symbol_data_local.dart';
 // 1. Arka plan bildirim işleyicisi (Main'in dışında, en üstte)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   print("Bildirim (Kapalıyken) geldi: ${message.messageId}");
 }
 

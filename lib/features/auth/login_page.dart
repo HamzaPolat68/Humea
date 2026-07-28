@@ -6,6 +6,11 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:humea/features/auth/sign_up.dart';
 import 'package:humea/home/home_page.dart';
 import 'package:humea/services/notification_service.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
+import 'dart:math';
+import 'dart:io' show Platform;
 
 class LoginPage extends StatefulWidget {
   final String? initialEmail;
@@ -24,6 +29,20 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _isPasswordVisible = false;
   bool _isLoading = false;
+  String _generateNonce([int length = 32]) {
+    const charset =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = Random.secure();
+    return List.generate(
+      length,
+      (_) => charset[random.nextInt(charset.length)],
+    ).join();
+  }
+
+  String _sha256ofString(String input) {
+    final bytes = utf8.encode(input);
+    return sha256.convert(bytes).toString();
+  }
 
   @override
   void initState() {
@@ -94,19 +113,28 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _signInWithGoogle() async {
     try {
-      // ⚠️ Firebase Console / Google Cloud Console üzerindeki "Web Client ID" bilgisini buraya yazın:
+      // Firebase Console -> Authentication -> Sign-in method -> Google altındaki Web Client ID
+      const String webClientId =
+          '885686922988-u4g39no20kmdtreri7kn1akmbu5fdb61.apps.googleusercontent.com';
+
+      // GoogleService-Info.plist içindeki CLIENT_ID (Sadece iOS için gerekebilir)
+      // Not: Info.plist doğru ayarlandıysa iOS bunu da otomatik çözer, ancak yazmak garantidir.
       final GoogleSignIn googleSignIn = GoogleSignIn(
         scopes: ['email'],
         serverClientId:
-            '885686922988-u4g39no20kmdtreri7kn1akmbu5fdb61.apps.googleusercontent.com',
+            webClientId, // Hem Android hem iOS için Firebase ID token üretir
+        clientId: Platform.isIOS
+            ? '885686922988-6u8bfopavgk7a2ohuefs19qnothlffku.apps.googleusercontent.com' // iOS Client ID'niz (varsa)
+            : null,
       );
 
+      // Eski oturum izlerini temizleyip hesap seçici ekranını zorlayarak açıyoruz
       await googleSignIn.signOut();
 
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
 
-      if (googleUser == null)
-        return; // Kullanıcı seçim yapmadan pencereyi kapattıysa
+      // Kullanıcı vazgeçip geri bastıysa işlem yapılmaz
+      if (googleUser == null) return;
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
@@ -116,11 +144,11 @@ class _LoginPageState extends State<LoginPage> {
         accessToken: googleAuth.accessToken,
       );
 
-      // Google ile Firebase Auth girişi yapılıyor
+      // Firebase Auth oturumu açılıyor
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithCredential(credential);
 
-      // ==================== GOOGLE İÇİN ESKİ KULLANICI KONTROLÜ ====================
+      // ==================== FIRESTORE & NOTIFICATION KONTROLLORINIZ ====================
       User? user = userCredential.user;
       if (user != null) {
         final userDoc = await FirebaseFirestore.instance
@@ -138,14 +166,10 @@ class _LoginPageState extends State<LoginPage> {
               .set({
                 'uid': user.uid,
                 'name': calculatedName,
-                'searchName': calculatedName
-                    .toLowerCase(), // Arama için küçük harf indeks
+                'searchName': calculatedName.toLowerCase(),
                 'email': user.email,
                 'createdAt': FieldValue.serverTimestamp(),
               });
-          print(
-            "Google ile giren eski kullanıcının eksik Firestore kaydı oluşturuldu.",
-          );
         }
 
         await NotificationService.syncFcmTokenToFirestore(userId: user.uid);
@@ -155,7 +179,49 @@ class _LoginPageState extends State<LoginPage> {
       _showMessage("Google ile başarıyla giriş yapıldı! 🎉", Colors.green);
       _navigateToHome();
     } catch (e) {
+      print("Google Giriş Hatası: $e");
       _showMessage("Google girişinde hata oluştu: $e", Colors.redAccent);
+    }
+  }
+
+  Future<void> _signInWithApple() async {
+    try {
+      UserCredential userCredential;
+
+      if (Platform.isAndroid) {
+        final appleProvider = AppleAuthProvider()
+          ..addScope('email')
+          ..addScope('name');
+
+        userCredential = await FirebaseAuth.instance.signInWithProvider(
+          appleProvider,
+        );
+      } else {
+        // iOS tarafı
+        final rawNonce = _generateNonce();
+        final hashedNonce = _sha256ofString(rawNonce);
+
+        final appleCredential = await SignInWithApple.getAppleIDCredential(
+          scopes: [
+            AppleIDAuthorizationScopes.email,
+            AppleIDAuthorizationScopes.fullName,
+          ],
+          nonce: hashedNonce,
+        );
+
+        final oauthCredential = OAuthProvider("apple.com").credential(
+          idToken: appleCredential.identityToken,
+          rawNonce: rawNonce,
+        );
+
+        userCredential = await FirebaseAuth.instance.signInWithCredential(
+          oauthCredential,
+        );
+      }
+
+      // Firestore & FCM işlemleri...
+    } catch (e) {
+      print("HATA: $e");
     }
   }
 
@@ -288,8 +354,28 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 30),
                         FadeInUp(
-                          child: _buildSocialIconButton(
-                            onPressed: () => _handleAction(_signInWithGoogle),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _buildSocialIconButton(
+                                onPressed: () =>
+                                    _handleAction(_signInWithGoogle),
+                                iconWidget: Image.network(
+                                  "https://pngimg.com/uploads/google/google_PNG19635.png",
+                                  height: 28,
+                                ),
+                              ),
+                              const SizedBox(width: 20),
+                              _buildSocialIconButton(
+                                onPressed: () =>
+                                    _handleAction(_signInWithApple),
+                                iconWidget: const Icon(
+                                  Icons.apple,
+                                  size: 32,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -379,7 +465,10 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _buildSocialIconButton({required VoidCallback onPressed}) {
+  Widget _buildSocialIconButton({
+    required VoidCallback onPressed,
+    required Widget iconWidget,
+  }) {
     return InkWell(
       onTap: onPressed,
       child: Container(
@@ -389,10 +478,7 @@ class _LoginPageState extends State<LoginPage> {
           color: Colors.white,
           boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
         ),
-        child: Image.network(
-          "https://pngimg.com/uploads/google/google_PNG19635.png",
-          height: 28,
-        ),
+        child: iconWidget,
       ),
     );
   }

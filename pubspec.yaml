@@ -1,7 +1,7 @@
 name: humea
 description: "A new Flutter project."
 publish_to: 'none'
-version: 1.3.0+1
+version: 1.4.0+5
 
 
 environment:
@@ -29,6 +29,7 @@ dependencies:
   font_awesome_flutter: ^10.7.0
   firebase_auth: ^6.4.0
   google_sign_in: ^6.2.1
+  crypto: ^3.0.7
   sign_in_with_apple: ^8.1.0
   flutter_facebook_auth: ^7.1.7
   flutter_dotenv: ^6.0.1

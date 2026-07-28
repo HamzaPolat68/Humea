@@ -14,12 +14,26 @@
 
         <activity android:name="com.facebook.CustomTabActivity" android:exported="true">
             <intent-filter>
-                <action android:name="android.intent.action.View" />
+                <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="@string/fb_login_protocol_scheme" />
             </intent-filter>
         </activity>
+
+        <!-- Sign in with Apple Web Authentication Activity (Application içine alındı) -->
+        <!-- CallbackActivity intent-filter alanı varsa varsayılan browser kafa karışıklığını önlemek için scheme'i netleştirin -->
+<activity
+    android:name="com.aboutyou.dart_packages.sign_in_with_apple.SignInWithAppleCallbackActivity"
+    android:exported="true">
+    <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="signinwithapple" />
+    </intent-filter>
+</activity>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -43,6 +57,9 @@
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
+    <meta-data
+    android:name="io.flutter.embedding.android.EnableImpeller"
+    android:value="false" />
 
     <queries>
         <intent>
