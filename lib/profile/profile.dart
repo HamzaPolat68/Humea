@@ -516,7 +516,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   const SizedBox(height: 30),
                   Row(
                     children: [
-                      // 1. TOPLAM DUYGU KAYDI (moods koleksiyonunu dinler)
+                      // 1. TOPLAM DUYGU KAYDI
                       Expanded(
                         child: StreamBuilder<QuerySnapshot>(
                           stream: FirebaseFirestore.instance
@@ -536,7 +536,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                       const SizedBox(width: 8),
 
-                      // 2. AKIŞTA PAYLAŞIM (posts koleksiyonunu dinler)
+                      // 2. AKIŞTA PAYLAŞIM
                       Expanded(
                         child: StreamBuilder<QuerySnapshot>(
                           stream: FirebaseFirestore.instance
@@ -551,15 +551,17 @@ class _ProfilePageState extends State<ProfilePage> {
                           },
                         ),
                       ),
-
                       const SizedBox(width: 8),
-                      // 3. En Fazla Paylaşılan (Bunu isterseniz yine Future ile initState'de yükleyebilirsiniz)
-                      _buildStatCard(
-                        "En Fazla Paylaştığın",
-                        _mostFrequentEmoji == "Veri Yok" ? "Yok" : "",
-                        emoji: _mostFrequentEmoji == "Veri Yok"
-                            ? null
-                            : _mostFrequentEmoji,
+
+                      // 3. EN FAZLA PAYLAŞTIĞIN (Expanded eklendi)
+                      Expanded(
+                        child: _buildStatCard(
+                          "En Fazla Paylaştığın",
+                          _mostFrequentEmoji == "Veri Yok" ? "Yok" : "",
+                          emoji: _mostFrequentEmoji == "Veri Yok"
+                              ? null
+                              : _mostFrequentEmoji,
+                        ),
                       ),
                     ],
                   ),
@@ -604,48 +606,49 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildStatCard(String title, String value, {String? emoji}) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
-        height: 110,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+      // Yüksekliği sabitlemek yerine minHeight veriyoruz
+      constraints: const BoxConstraints(minHeight: 100),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Colors.black54,
+              fontWeight: FontWeight.w500,
             ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+          ),
+          const SizedBox(height: 6),
+          if (emoji != null) ...[
+            Text(emoji, style: const TextStyle(fontSize: 24)),
+          ] else ...[
             Text(
-              title,
-              textAlign: TextAlign.center,
+              value,
               style: const TextStyle(
-                fontSize: 11,
-                color: Colors.black54,
-                fontWeight: FontWeight.w500,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
               ),
             ),
-            const SizedBox(height: 6),
-            if (emoji != null) ...[
-              Text(emoji, style: const TextStyle(fontSize: 26)),
-            ] else ...[
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-            ],
           ],
-        ),
+        ],
       ),
     );
   }
