@@ -113,27 +113,20 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _signInWithGoogle() async {
     try {
-      // Firebase Console -> Authentication -> Sign-in method -> Google altındaki Web Client ID
       const String webClientId =
           '885686922988-u4g39no20kmdtreri7kn1akmbu5fdb61.apps.googleusercontent.com';
 
-      // GoogleService-Info.plist içindeki CLIENT_ID (Sadece iOS için gerekebilir)
-      // Not: Info.plist doğru ayarlandıysa iOS bunu da otomatik çözer, ancak yazmak garantidir.
       final GoogleSignIn googleSignIn = GoogleSignIn(
         scopes: ['email'],
-        serverClientId:
-            webClientId, // Hem Android hem iOS için Firebase ID token üretir
+        serverClientId: webClientId,
         clientId: Platform.isIOS
-            ? '885686922988-6u8bfopavgk7a2ohuefs19qnothlffku.apps.googleusercontent.com' // iOS Client ID'niz (varsa)
+            ? '885686922988-6u8bfopavgk7a2ohuefs19qnothlffku.apps.googleusercontent.com'
             : null,
       );
 
-      // Eski oturum izlerini temizleyip hesap seçici ekranını zorlayarak açıyoruz
       await googleSignIn.signOut();
-
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
 
-      // Kullanıcı vazgeçip geri bastıysa işlem yapılmaz
       if (googleUser == null) return;
 
       final GoogleSignInAuthentication googleAuth =
@@ -144,11 +137,9 @@ class _LoginPageState extends State<LoginPage> {
         accessToken: googleAuth.accessToken,
       );
 
-      // Firebase Auth oturumu açılıyor
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithCredential(credential);
 
-      // ==================== FIRESTORE & NOTIFICATION KONTROLLORINIZ ====================
       User? user = userCredential.user;
       if (user != null) {
         final userDoc = await FirebaseFirestore.instance
@@ -171,16 +162,14 @@ class _LoginPageState extends State<LoginPage> {
                 'createdAt': FieldValue.serverTimestamp(),
               });
         }
-
         await NotificationService.syncFcmTokenToFirestore(userId: user.uid);
       }
-      // =============================================================================
 
-      _showMessage("Google ile başarıyla giriş yapıldı! 🎉", Colors.green);
+      _showMessage("Google ile başarıyla giriş yapıldı!", Colors.green);
       _navigateToHome();
     } catch (e) {
       print("Google Giriş Hatası: $e");
-      _showMessage("Google girişinde hata oluştu: $e", Colors.redAccent);
+      _showMessage("Google girişi başarısız oldu.", Colors.redAccent);
     }
   }
 
@@ -197,7 +186,6 @@ class _LoginPageState extends State<LoginPage> {
           appleProvider,
         );
       } else {
-        // iOS tarafı
         final rawNonce = _generateNonce();
         final hashedNonce = _sha256ofString(rawNonce);
 
@@ -217,11 +205,50 @@ class _LoginPageState extends State<LoginPage> {
         userCredential = await FirebaseAuth.instance.signInWithCredential(
           oauthCredential,
         );
+
+        String? displayName;
+        if (appleCredential.givenName != null ||
+            appleCredential.familyName != null) {
+          displayName =
+              "${appleCredential.givenName ?? ''} ${appleCredential.familyName ?? ''}"
+                  .trim();
+        }
+
+        User? user = userCredential.user;
+        if (user != null) {
+          final userDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+
+          if (!userDoc.exists) {
+            String calculatedName =
+                displayName ??
+                user.displayName ??
+                (user.email != null
+                    ? user.email!.split('@').first
+                    : "Kullanıcı");
+
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.uid)
+                .set({
+                  'uid': user.uid,
+                  'name': calculatedName,
+                  'searchName': calculatedName.toLowerCase(),
+                  'email': user.email ?? appleCredential.email ?? '',
+                  'createdAt': FieldValue.serverTimestamp(),
+                });
+          }
+          await NotificationService.syncFcmTokenToFirestore(userId: user.uid);
+        }
       }
 
-      // Firestore & FCM işlemleri...
+      _showMessage("Apple ile başarıyla giriş yapıldı!", Colors.green);
+      _navigateToHome();
     } catch (e) {
-      print("HATA: $e");
+      print("Apple Giriş Hatası: $e");
+      _showMessage("Apple girişi başarısız oldu.", Colors.redAccent);
     }
   }
 
