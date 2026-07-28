@@ -116,12 +116,14 @@ class _LoginPageState extends State<LoginPage> {
       const String webClientId =
           '885686922988-u4g39no20kmdtreri7kn1akmbu5fdb61.apps.googleusercontent.com';
 
+      // GoogleService-Info.plist dosyanızdaki gerçek iOS CLIENT_ID
+      const String iosClientId =
+          '885686922988-9ghv15k6bvuth3hcql8vg7ei9qj12r46.apps.googleusercontent.com';
+
       final GoogleSignIn googleSignIn = GoogleSignIn(
         scopes: ['email'],
         serverClientId: webClientId,
-        clientId: Platform.isIOS
-            ? '885686922988-6u8bfopavgk7a2ohuefs19qnothlffku.apps.googleusercontent.com'
-            : null,
+        clientId: Platform.isIOS ? iosClientId : null, // ✅ DOĞRU (iOS ID'si)
       );
 
       await googleSignIn.signOut();
