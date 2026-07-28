@@ -96,15 +96,19 @@ class _LoginPageState extends State<LoginPage> {
           'uid': user.uid,
           'userImageUrl': user.photoURL ?? '',
           'name': calculatedName,
-          'searchName': calculatedName
-              .toLowerCase(), // Arama için küçük harf indeks
+          'searchName': calculatedName.toLowerCase(),
           'email': user.email,
           'createdAt': FieldValue.serverTimestamp(),
         });
         print("Eski kullanıcının eksik Firestore kaydı başarıyla oluşturuldu.");
       }
 
-      await NotificationService.syncFcmTokenToFirestore(userId: user.uid);
+      // GÜNCELLEME BURADA: FCM Hatası Giriş İşlemini Engellemesin
+      try {
+        await NotificationService.syncFcmTokenToFirestore(userId: user.uid);
+      } catch (e) {
+        print("FCM Token senkronizasyon hatası es geçildi: $e");
+      }
     }
     // ===========================================================================
 
@@ -251,7 +255,11 @@ class _LoginPageState extends State<LoginPage> {
                   'createdAt': FieldValue.serverTimestamp(),
                 });
           }
-          await NotificationService.syncFcmTokenToFirestore(userId: user.uid);
+          try {
+            await NotificationService.syncFcmTokenToFirestore(userId: user.uid);
+          } catch (e) {
+            print("FCM Token senkronizasyon hatası es geçildi: $e");
+          }
         }
       }
 
