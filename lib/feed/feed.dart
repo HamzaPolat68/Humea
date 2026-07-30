@@ -228,12 +228,14 @@ class _FeedPageState extends State<FeedPage> {
         });
 
         // Bildirim kısmı...
+        // Bildirim kısmı...
         if (post.userId != user.uid) {
           await FirebaseFirestore.instance.collection('notifications').add({
             'recipientId': post.userId,
             'senderId': user.uid,
             'senderName': user.displayName ?? 'Anonim',
             'type': 'like',
+            'postId': post.id, // <-- EKLENDİ
             'isRead': false,
             'timestamp': FieldValue.serverTimestamp(),
           });

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:humea/feed/post_detail_page.dart'; // kendi path'inize göre düzenleyin
 
 String buildNotificationMessage(Map<String, dynamic>? data) {
   final senderName = (data?['senderName'] ?? 'Birisi').toString();
@@ -23,9 +24,14 @@ String buildNotificationMessage(Map<String, dynamic>? data) {
   }
 }
 
-class NotificationsPage extends StatelessWidget {
+class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
 
+  @override
+  State<NotificationsPage> createState() => _NotificationsPageState();
+}
+
+class _NotificationsPageState extends State<NotificationsPage> {
   // Bildirim tipine göre İkon seçici
   IconData _getNotificationIcon(String? type) {
     switch (type) {
@@ -58,7 +64,7 @@ class NotificationsPage extends StatelessWidget {
     }
   }
 
-  // Göreceli zaman formatlayıcı (ör: 5 dk önce)
+  // Göreceli zaman formatlayıcı
   String _formatTimestamp(Timestamp? timestamp) {
     if (timestamp == null) return 'Az önce';
     final date = timestamp.toDate();
@@ -78,7 +84,6 @@ class NotificationsPage extends StatelessWidget {
     }
   }
 
-  // Tüm bildirimleri okundu olarak işaretleme
   Future<void> _markAllAsRead(String uid) async {
     final unreadDocs = await FirebaseFirestore.instance
         .collection('notifications')
@@ -93,7 +98,6 @@ class NotificationsPage extends StatelessWidget {
     await batch.commit();
   }
 
-  // Tekil bildirimi okundu işaretleme
   Future<void> _markAsRead(String docId) async {
     await FirebaseFirestore.instance
         .collection('notifications')
@@ -101,12 +105,47 @@ class NotificationsPage extends StatelessWidget {
         .update({'isRead': true});
   }
 
-  // Bildirimi silme
   Future<void> _deleteNotification(String docId) async {
     await FirebaseFirestore.instance
         .collection('notifications')
         .doc(docId)
         .delete();
+  }
+
+  // Eski "like" bildirimlerinde postId eksikse, likesList üzerinden
+  // geriye dönük olarak ilgili gönderiyi bulmaya çalışır.
+  Future<String?> _resolveMissingPostId({
+    required String recipientId,
+    required String senderId,
+  }) async {
+    try {
+      final query = await FirebaseFirestore.instance
+          .collection('posts')
+          .where('userId', isEqualTo: recipientId)
+          .get();
+
+      final matches = query.docs.where((doc) {
+        final likesList = (doc.data()['likesList'] as List<dynamic>? ?? []);
+        return likesList.any(
+          (like) => like is Map && like['userId'] == senderId,
+        );
+      }).toList();
+
+      if (matches.isEmpty) return null;
+      if (matches.length == 1) return matches.first.id;
+
+      matches.sort((a, b) {
+        final tsA =
+            (a.data()['timestamp'] as Timestamp?)?.toDate() ?? DateTime(0);
+        final tsB =
+            (b.data()['timestamp'] as Timestamp?)?.toDate() ?? DateTime(0);
+        return tsB.compareTo(tsA);
+      });
+      return matches.first.id;
+    } catch (e) {
+      debugPrint('postId geri bulma hatası: $e');
+      return null;
+    }
   }
 
   @override
@@ -202,15 +241,61 @@ class NotificationsPage extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(12),
-                    onTap: () {
+                    onTap: () async {
                       if (!isRead) _markAsRead(doc.id);
-                      // TODO: Bildirime tıklandığında ilgili gönderiye/yorma gitme mantığı buraya eklenebilir.
+
+                      String postId = (data['postId'] ?? '').toString();
+                      final recipientId = (data['recipientId'] ?? '')
+                          .toString();
+                      final senderId = (data['senderId'] ?? '').toString();
+
+                      if (postId.isEmpty &&
+                          recipientId.isNotEmpty &&
+                          senderId.isNotEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Gönderi aranıyor...'),
+                            duration: Duration(milliseconds: 800),
+                          ),
+                        );
+
+                        final resolved = await _resolveMissingPostId(
+                          recipientId: recipientId,
+                          senderId: senderId,
+                        );
+                        if (resolved != null) postId = resolved;
+                      }
+
+                      if (!mounted) return;
+
+                      if (postId.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Gönderi bulunamadı, silinmiş olabilir.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => PostDetailPage(
+                            postId: postId,
+                            highlightCommentId: (data['commentId'] ?? '')
+                                .toString(),
+                            highlightReplyId: (data['replyId'] ?? '')
+                                .toString(),
+                          ),
+                        ),
+                      );
                     },
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: Row(
                         children: [
-                          // Profil / İkon Avatarı
                           Stack(
                             children: [
                               CircleAvatar(
@@ -230,7 +315,6 @@ class NotificationsPage extends StatelessWidget {
                                       )
                                     : null,
                               ),
-                              // Eğer resim varsa sağ altına küçük tip ikonu ekleme
                               if (senderImageUrl != null &&
                                   senderImageUrl.isNotEmpty)
                                 Positioned(
@@ -249,7 +333,6 @@ class NotificationsPage extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(width: 12),
-                          // Mesaj ve Zaman
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -275,7 +358,6 @@ class NotificationsPage extends StatelessWidget {
                               ],
                             ),
                           ),
-                          // Okunmadı Noktası
                           if (!isRead)
                             Container(
                               width: 8,

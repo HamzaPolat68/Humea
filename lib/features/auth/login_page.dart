@@ -193,6 +193,7 @@ class _LoginPageState extends State<LoginPage> {
       UserCredential userCredential;
 
       if (Platform.isAndroid) {
+        // Android tarafında Web OAuth akışı kullanılır
         final appleProvider = AppleAuthProvider()
           ..addScope('email')
           ..addScope('name');
@@ -200,7 +201,8 @@ class _LoginPageState extends State<LoginPage> {
         userCredential = await FirebaseAuth.instance.signInWithProvider(
           appleProvider,
         );
-      } else {
+      } else if (Platform.isIOS) {
+        // iOS Tarafı: Native Apple Credential (Web Yönlendirmesi Yapmaz, Hatanın Kesin Çözümüdür)
         final rawNonce = _generateNonce();
         final hashedNonce = _sha256ofString(rawNonce);
 
@@ -217,6 +219,7 @@ class _LoginPageState extends State<LoginPage> {
           rawNonce: rawNonce,
         );
 
+        // Firebase'e yerel credential ile giriş yap
         userCredential = await FirebaseAuth.instance.signInWithCredential(
           oauthCredential,
         );
@@ -238,11 +241,12 @@ class _LoginPageState extends State<LoginPage> {
 
           if (!userDoc.exists) {
             String calculatedName =
-                displayName ??
-                user.displayName ??
-                (user.email != null
-                    ? user.email!.split('@').first
-                    : "Kullanıcı");
+                (displayName != null && displayName.isNotEmpty)
+                ? displayName
+                : (user.displayName ??
+                      (user.email != null
+                          ? user.email!.split('@').first
+                          : "Kullanıcı"));
 
             await FirebaseFirestore.instance
                 .collection('users')
@@ -258,16 +262,22 @@ class _LoginPageState extends State<LoginPage> {
           try {
             await NotificationService.syncFcmTokenToFirestore(userId: user.uid);
           } catch (e) {
-            print("FCM Token senkronizasyon hatası es geçildi: $e");
+            print("FCM Token hatası es geçildi: $e");
           }
         }
+      } else {
+        return;
       }
 
       _showMessage("Apple ile başarıyla giriş yapıldı!", Colors.green);
       _navigateToHome();
     } catch (e) {
-      print("Apple Giriş Hatası: $e");
-      _showMessage("Apple girişi başarısız oldu.", Colors.redAccent);
+      print("Apple Giriş Hata Detayı: $e");
+      if (e.toString().contains("Canceled") || e.toString().contains("1001")) {
+        _showMessage("Giriş işlemi iptal edildi.", Colors.orangeAccent);
+      } else {
+        _showMessage("Apple girişi başarısız oldu.", Colors.redAccent);
+      }
     }
   }
 

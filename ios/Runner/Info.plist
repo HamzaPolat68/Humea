@@ -2,84 +2,92 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CADisableMinimumFrameDurationOnPhone</key>
-	<true/>
-	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<key>CFBundleDisplayName</key>
-	<string>Humea</string>
-	<key>CFBundleExecutable</key>
-	<string>$(EXECUTABLE_NAME)</string>
-	<key>CFBundleIdentifier</key>
-	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>CFBundleName</key>
-	<string>humea</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>$(FLUTTER_BUILD_NAME)</string>
-	<key>CFBundleVersion</key>
-	<string>$(FLUTTER_BUILD_NUMBER)</string>
+    <key>CADisableMinimumFrameDurationOnPhone</key>
+    <true/>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>$(DEVELOPMENT_LANGUAGE)</string>
+    <key>CFBundleDisplayName</key>
+    <string>Humea</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>humea</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$(FLUTTER_BUILD_NAME)</string>
+    <key>CFBundleVersion</key>
+    <string>$(FLUTTER_BUILD_NUMBER)</string>
 
-	<!-- Google Sign-In URL Schemes & OAuth Configurations -->
-	<!-- Google Sign-In URL Schemes & OAuth Configurations -->
+
+    <!-- Google Sign-In & Firebase Auth Yönlendirme (URL Schemes) -->
     <key>CFBundleURLTypes</key>
     <array>
+        <!-- Google Sign-In Reversed Client ID -->
         <dict>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>CFBundleURLSchemes</key>
             <array>
-                <!-- DÜZELTİLEN REVERSED CLIENT ID -->
                 <string>com.googleusercontent.apps.885686922988-9ghv15k6bvuth3hcql8vg7ei9qj12r46</string>
+            </array>
+        </dict>
+        <!-- Firebase Auth Redirect / Encoded App ID (Siteden Uygulamaya Otomatik Dönüş İçin) -->
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>app-1-885686922988-ios-9ghv15k6bvuth3hcql8vg7ei9qj12r46</string>
             </array>
         </dict>
     </array>
 
     <!-- Google Sign-In Client ID (iOS Native SDK için) -->
     <key>GIDClientID</key>
-    <!-- DÜZELTİLEN CLIENT ID -->
     <string>885686922988-9ghv15k6bvuth3hcql8vg7ei9qj12r46.apps.googleusercontent.com</string>
 
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
 
-	<!-- Push Notification Background Modes -->
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>fetch</string>
-		<string>remote-notification</string>
-	</array>
+    <!-- Push Notification Background Modes -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>fetch</string>
+        <string>remote-notification</string>
+    </array>
 
-	<key>UIApplicationSceneManifest</key>
-	<dict>
-		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
-	</dict>
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key>
+        <false/>
+    </dict>
 
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
+    <key>UIApplicationSupportsIndirectInputEvents</key>
+    <true/>
 
-	<!-- Kamera ve Galeri İzin Açıklamaları (App Store Onayı İçin Zorunludur) -->
-	<key>NSCameraUsageDescription</key>
-	<string>Profil fotoğrafı yüklemek ve uygulama içi görsel çekmek için kameranıza erişim gereklidir.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Profil fotoğrafı ve içerik yükleyebilmeniz için galerinizden fotoğraf seçilmesine izin vermeniz gereklidir.</string>
+    <!-- Kamera ve Galeri İzin Açıklamaları (App Store Onayı İçin Zorunludur) -->
+    <key>NSCameraUsageDescription</key>
+    <string>Profil fotoğrafı yüklemek ve uygulama içi görsel çekmek için kameranıza erişim gereklidir.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Profil fotoğrafı ve içerik yükleyebilmeniz için galerinizden fotoğraf seçilmesine izin vermeniz gereklidir.</string>
 
-	<key>UILaunchStoryboardName</key>
-	<string>LaunchScreen</string>
-	<key>UIMainStoryboardFile</key>
-	<string>Main</string>
-	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<false/>
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
+    <key>UIMainStoryboardFile</key>
+    <string>Main</string>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UIViewControllerBasedStatusBarAppearance</key>
+    <false/>
 </dict>
 </plist>

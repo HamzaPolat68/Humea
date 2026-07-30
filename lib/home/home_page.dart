@@ -63,7 +63,6 @@ class _HomePageState extends State<HomePage> {
     if (user != null) {
       setupNotifications(user.uid);
     }
-    // Firebase Auth durumunu kontrol edip öyle yükleme yapın
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
       if (user != null) {
         _checkAndCreateUserDocument(user);
@@ -95,7 +94,6 @@ class _HomePageState extends State<HomePage> {
           .orderBy('date', descending: false)
           .get();
 
-      // LİSTEYİ TAMAMEN DEĞİŞTİRİYORUZ
       setState(() {
         _allMoodEntries = snapshot.docs.map((doc) {
           final data = doc.data();
@@ -118,7 +116,6 @@ class _HomePageState extends State<HomePage> {
           .doc(user.uid)
           .get();
 
-      // Eğer kullanıcının dökümanı yoksa otomatik oluşturuyoruz
       if (!userDoc.exists) {
         String calculatedName =
             user.displayName ??
@@ -130,8 +127,7 @@ class _HomePageState extends State<HomePage> {
           'uid': user.uid,
           'userImageUrl': user.photoURL ?? '',
           'name': calculatedName,
-          'searchName': calculatedName
-              .toLowerCase(), // Arama için küçük harf indeks
+          'searchName': calculatedName.toLowerCase(),
           'email': user.email,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -144,8 +140,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // _HomePageState sınıfının içinde:
-  // İstatistikleri Firebase'den çeken yeni fonksiyon
   Future<void> _loadStatsFromFirestore() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -156,44 +150,33 @@ class _HomePageState extends State<HomePage> {
         .get();
 
     if (doc.exists) {
-      // Burada gelen istatistikleri kullanabilirsin.
-      // Örneğin: double ortalama = doc.data()?['averageScore'];
       print("İstatistikler yüklendi: ${doc.data()}");
     }
   }
 
   Future<void> _updateStatsInFirebase(String userId) async {
     try {
-      // 1. Veri kontrolü
       if (_allMoodEntries.isEmpty) {
         print("Kayıtlı mod girişi bulunamadı, istatistik hesaplanamadı.");
         return;
       }
 
-      // 2. Ortalama hesaplama
       double totalScore = _allMoodEntries
           .map((e) => e.score)
           .reduce((a, b) => a + b);
       double averageScore = totalScore / _allMoodEntries.length;
 
-      print(
-        "İstatistik hesaplanıyor: Ortalama $averageScore, Adet ${_allMoodEntries.length}",
-      );
-
-      // 3. Yazma işlemi
       await FirebaseFirestore.instance
           .collection('mood_stats')
-          .doc(userId) // Doküman ID'si kullanıcı ID'si olmalı
+          .doc(userId)
           .set({
             'averageScore': averageScore,
             'entryCount': _allMoodEntries.length,
-            'lastUpdated':
-                FieldValue.serverTimestamp(), // Daha güvenilir zaman damgası
+            'lastUpdated': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
 
       print("Başarıyla Firestore'a kaydedildi.");
     } catch (e) {
-      // Hatanın detaylı yazdırılması
       print("!!! İstatistik güncelleme hatası: $e");
     }
   }
@@ -203,14 +186,12 @@ class _HomePageState extends State<HomePage> {
     if (user == null) return;
 
     try {
-      // 1. Önce veriyi çek (listeyi en başta boşaltma!)
       final snapshot = await FirebaseFirestore.instance
           .collection('moods')
           .where('userId', isEqualTo: user.uid)
           .orderBy('date', descending: false)
           .get();
 
-      // 2. Yeni listeyi hazırla
       final List<MoodEntry> updatedEntries = snapshot.docs.map((doc) {
         final data = doc.data();
         return MoodEntry(
@@ -219,13 +200,11 @@ class _HomePageState extends State<HomePage> {
         );
       }).toList();
 
-      // 3. Sadece veriler hazır olduğunda setState'i bir kez çağır
       setState(() {
         _allMoodEntries = updatedEntries;
       });
     } catch (e) {
       print("Veri yenileme hatası: $e");
-      // Hata durumunda eski veriyi korumuş oluyoruz (çünkü listeyi silmedik)
     }
   }
 
@@ -239,22 +218,16 @@ class _HomePageState extends State<HomePage> {
       return false;
     }
 
-    // DateTime.now() ile o anki saati alıyoruz, böylece aynı gün içinde
-    // farklı saatlerde birden fazla kayıt oluşturulabilir.
     DateTime now = DateTime.now();
     double score = _emojiToScore[emoji] ?? 5.0;
 
-    print("KAYDEDİLEN PUAN: $score"); // Konsolda kaç yazıyor?
-
     try {
-      // Firestore'a doğrudan yeni kayıt ekle
       await FirebaseFirestore.instance.collection('moods').add({
         'userId': user.uid,
-        'date': Timestamp.fromDate(now), // Timestamp saati de içerir
+        'date': Timestamp.fromDate(now),
         'score': score,
       });
       await _updateStatsInFirebase(user.uid);
-      // Yerel listeyi güncelle
       setState(() {
         _allMoodEntries.add(MoodEntry(date: now, score: score));
       });
@@ -278,7 +251,6 @@ class _HomePageState extends State<HomePage> {
       const Duration(days: 6, hours: 23, minutes: 59, seconds: 59),
     );
 
-    // 1. O haftaya ait tüm girişleri gruplayalım
     Map<int, List<double>> dailyScores = {
       0: [],
       1: [],
@@ -294,12 +266,11 @@ class _HomePageState extends State<HomePage> {
             targetMonday.subtract(const Duration(seconds: 1)),
           ) &&
           entry.date.isBefore(targetSunday)) {
-        int weekdayIndex = entry.date.weekday - 1; // Pzt=0, Paz=6
+        int weekdayIndex = entry.date.weekday - 1;
         dailyScores[weekdayIndex]?.add(entry.score);
       }
     }
 
-    // 2. Gruplanan verilerin ortalamasını alıp FlSpot üretelim
     List<FlSpot> spots = [];
     for (int i = 0; i < 7; i++) {
       if (dailyScores[i]!.isNotEmpty) {
@@ -456,7 +427,6 @@ class _HomePageState extends State<HomePage> {
         return SafeArea(
           child: FeedPage(
             onPostDeleted: () async {
-              // Tek bir fonksiyon çağrısı yeterli
               await _refreshData();
             },
           ),
@@ -523,28 +493,35 @@ class _HomePageState extends State<HomePage> {
                     backgroundImage: _resolveProfileImageProvider(),
                   ),
                   const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Hoş Geldin',
-                        style: TextStyle(
-                          color: Color.fromARGB(255, 252, 252, 253),
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+
+                  // DÜZELTME BURADA YAPILDI:
+                  // Expanded ve TextOverflow.ellipsis eklenerek taşma engellendi.
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Hoş Geldin',
+                          style: TextStyle(
+                            color: Color.fromARGB(255, 252, 252, 253),
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      Text(
-                        _getUserName(),
-                        style: const TextStyle(
-                          color: Color.fromARGB(255, 9, 9, 9),
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                        Text(
+                          _getUserName(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color.fromARGB(255, 9, 9, 9),
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                  const Spacer(),
+
                   IconButton(
                     icon: const Icon(
                       Icons.search,
