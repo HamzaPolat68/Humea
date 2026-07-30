@@ -235,7 +235,7 @@ class _FeedPageState extends State<FeedPage> {
             'senderId': user.uid,
             'senderName': user.displayName ?? 'Anonim',
             'type': 'like',
-            'postId': post.id, // <-- EKLENDİ
+            'postId': post.id,
             'isRead': false,
             'timestamp': FieldValue.serverTimestamp(),
           });
@@ -763,39 +763,38 @@ class _FeedPageState extends State<FeedPage> {
 
           const SizedBox(height: 16),
           // Beğeni Barı
+          // Beğeni Barı
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
               color: Colors.grey[50],
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
-                // Mevcut butonunuza dokunmadık
-                _interactionButton(
-                  icon: isPostLikedByMe
-                      ? Icons.favorite
-                      : Icons.favorite_border,
-                  label: "Beğen",
-                  likeCount: post.likes,
-                  isLiked: isPostLikedByMe,
-                  onLikeToggle: () => _toggleLike(post), // Kalbe basınca
-                  onShowLikes: () => _showLikesDialog(
-                    context,
-                    post.likesList,
-                  ), // Sayıya basınca
+                // Beğeni Butonu
+                Expanded(
+                  child: _interactionButton(
+                    icon: isPostLikedByMe
+                        ? Icons.favorite
+                        : Icons.favorite_border,
+                    label: "Beğen",
+                    likeCount: post.likes,
+                    isLiked: isPostLikedByMe,
+                    onLikeToggle: () => _toggleLike(post),
+                    onShowLikes: () =>
+                        _showLikesDialog(context, post.likesList),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                // Yeni Yorum Butonu
+                const SizedBox(width: 4),
                 // Yorum Butonu
                 Expanded(
                   child: _interactionButton(
                     icon: Icons.chat_bubble_outline,
-                    label: "Yorum  ",
+                    label: "Yorum",
                     likeCount: post.commentsCount,
                     isLiked: false,
                     onTap: () {
-                      // Yorum yazmak için geçici bir controller
                       final TextEditingController commentFieldController =
                           TextEditingController();
 
@@ -809,7 +808,6 @@ class _FeedPageState extends State<FeedPage> {
                           ),
                         ),
                         builder: (context) => Padding(
-                          // Klavyenin modalı yukarı itmesini sağlar
                           padding: EdgeInsets.only(
                             bottom: MediaQuery.of(context).viewInsets.bottom,
                           ),
@@ -830,11 +828,10 @@ class _FeedPageState extends State<FeedPage> {
                                           style: TextStyle(
                                             fontSize: 18,
                                             fontWeight: FontWeight.bold,
+                                            color: Colors.black87,
                                           ),
                                         ),
                                       ),
-
-                                      // YORUMLARI LİSTELEME
                                       Expanded(
                                         child: StreamBuilder<QuerySnapshot>(
                                           stream: FirebaseFirestore.instance
@@ -854,7 +851,17 @@ class _FeedPageState extends State<FeedPage> {
                                               );
                                             }
 
-                                            // StreamBuilder içindeki ListView.builder kısmını güncelle
+                                            if (snapshot.data!.docs.isEmpty) {
+                                              return const Center(
+                                                child: Text(
+                                                  "Henüz yorum yapılmamış.",
+                                                  style: TextStyle(
+                                                    color: Colors.black54,
+                                                  ),
+                                                ),
+                                              );
+                                            }
+
                                             return ListView.builder(
                                               controller: scrollController,
                                               itemCount:
@@ -898,27 +905,51 @@ class _FeedPageState extends State<FeedPage> {
                                           },
                                         ),
                                       ),
-
-                                      // YORUM YAZMA ALANI
                                       Padding(
-                                        padding: const EdgeInsets.all(8.0),
+                                        padding: const EdgeInsets.all(12.0),
                                         child: Row(
                                           children: [
                                             Expanded(
                                               child: TextField(
                                                 controller:
                                                     commentFieldController,
+                                                style: const TextStyle(
+                                                  color: Colors.black87,
+                                                ),
                                                 decoration: InputDecoration(
                                                   hintText: "Yorum ekle...",
-                                                  border: OutlineInputBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          20,
-                                                        ),
+                                                  hintStyle: TextStyle(
+                                                    color: Colors.grey[600],
                                                   ),
+                                                  filled: true,
+                                                  fillColor: Colors.grey[100],
+                                                  focusedBorder:
+                                                      OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              20,
+                                                            ),
+                                                        borderSide:
+                                                            const BorderSide(
+                                                              color:
+                                                                  Colors.blue,
+                                                            ),
+                                                      ),
+                                                  enabledBorder:
+                                                      OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              20,
+                                                            ),
+                                                        borderSide: BorderSide(
+                                                          color:
+                                                              Colors.grey[300]!,
+                                                        ),
+                                                      ),
                                                 ),
                                               ),
                                             ),
+                                            const SizedBox(width: 8),
                                             IconButton(
                                               icon: const Icon(
                                                 Icons.send,
@@ -928,7 +959,6 @@ class _FeedPageState extends State<FeedPage> {
                                                 if (commentFieldController.text
                                                     .trim()
                                                     .isNotEmpty) {
-                                                  // Yorumu ekle
                                                   _addComment(
                                                     post.id,
                                                     commentFieldController.text,
@@ -1377,7 +1407,6 @@ class _FeedPageState extends State<FeedPage> {
                           : FileImage(File(effectiveCommentImage))
                                 as ImageProvider)
                     : null,
-
                 child: effectiveCommentImage == null
                     ? Text(
                         userName.isNotEmpty
@@ -1386,6 +1415,7 @@ class _FeedPageState extends State<FeedPage> {
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
+                          color: Colors.black87,
                         ),
                       )
                     : null,
@@ -1417,6 +1447,7 @@ class _FeedPageState extends State<FeedPage> {
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14,
+                                    color: Colors.black87,
                                   ),
                                 ),
                               ),
@@ -1424,8 +1455,8 @@ class _FeedPageState extends State<FeedPage> {
                                 _formatDate(
                                   timestamp?.toDate() ?? DateTime.now(),
                                 ),
-                                style: const TextStyle(
-                                  color: Colors.grey,
+                                style: TextStyle(
+                                  color: Colors.grey[600],
                                   fontSize: 11,
                                 ),
                               ),
@@ -1435,9 +1466,18 @@ class _FeedPageState extends State<FeedPage> {
                       ],
                     ),
                     const SizedBox(height: 6),
+
+                    // YORUM METNİ (DÜZELTİLEN KISIM)
                     buildLinkifiedText(
                       commentText,
-                      style: const TextStyle(fontSize: 14),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.black87,
+                      ),
+                      linkStyle: const TextStyle(
+                        color: Colors.blue,
+                        decoration: TextDecoration.underline,
+                      ),
                     ),
 
                     const SizedBox(height: 8),
