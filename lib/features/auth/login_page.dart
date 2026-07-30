@@ -189,15 +189,6 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // Güvenli Random Nonce Üretici
-  String _cryptoRawNonce([int length = 32]) {
-    const charset =
-        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._~';
-    final random = Random.secure();
-    return List.generate(
-      length,
-      (_) => charset[random.nextInt(charset.length)],
-    ).join();
-  }
 
   Future<void> _signInWithApple() async {
     try {
@@ -212,31 +203,26 @@ class _LoginPageState extends State<LoginPage> {
           appleProvider,
         );
       } else if (Platform.isIOS) {
-        // 1. Nonce Üretimi ve Hashleme
-        final rawNonce = _cryptoRawNonce();
-        final hashedNonce = _sha256ofString(rawNonce);
-
-        // 2. Apple Native Akışı
+        // 1. Native Apple Credential (Nonce olmadan çağırıyoruz)
         final appleCredential = await SignInWithApple.getAppleIDCredential(
           scopes: [
             AppleIDAuthorizationScopes.email,
             AppleIDAuthorizationScopes.fullName,
           ],
-          nonce: hashedNonce,
         );
 
-        // 3. Firebase Credential Oluşturma
+        // 2. OAuth Credential (rawNonce göndermiyoruz)
         final oauthCredential = OAuthProvider("apple.com").credential(
           idToken: appleCredential.identityToken,
-          rawNonce: rawNonce,
+          accessToken: appleCredential.authorizationCode,
         );
 
-        // 4. Firebase Auth Oturum Açma
+        // 3. Firebase'e Giriş
         userCredential = await FirebaseAuth.instance.signInWithCredential(
           oauthCredential,
         );
 
-        // 5. Profil / Firestore Bilgileri
+        // 4. Kullanıcı Profil ve Firestore İşlemleri
         String? displayName;
         if (appleCredential.givenName != null ||
             appleCredential.familyName != null) {
