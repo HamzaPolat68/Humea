@@ -188,12 +188,22 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  // Güvenli Random Nonce Üretici
+  String _cryptoRawNonce([int length = 32]) {
+    const charset =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._~';
+    final random = Random.secure();
+    return List.generate(
+      length,
+      (_) => charset[random.nextInt(charset.length)],
+    ).join();
+  }
+
   Future<void> _signInWithApple() async {
     try {
       UserCredential userCredential;
 
       if (Platform.isAndroid) {
-        // Android tarafında Web OAuth akışı kullanılır
         final appleProvider = AppleAuthProvider()
           ..addScope('email')
           ..addScope('name');
@@ -202,10 +212,11 @@ class _LoginPageState extends State<LoginPage> {
           appleProvider,
         );
       } else if (Platform.isIOS) {
-        // iOS Tarafı: Native Apple Credential (Web Yönlendirmesi Yapmaz, Hatanın Kesin Çözümüdür)
-        final rawNonce = _generateNonce();
+        // 1. Nonce Üretimi ve Hashleme
+        final rawNonce = _cryptoRawNonce();
         final hashedNonce = _sha256ofString(rawNonce);
 
+        // 2. Apple Native Akışı
         final appleCredential = await SignInWithApple.getAppleIDCredential(
           scopes: [
             AppleIDAuthorizationScopes.email,
@@ -214,16 +225,18 @@ class _LoginPageState extends State<LoginPage> {
           nonce: hashedNonce,
         );
 
+        // 3. Firebase Credential Oluşturma
         final oauthCredential = OAuthProvider("apple.com").credential(
           idToken: appleCredential.identityToken,
           rawNonce: rawNonce,
         );
 
-        // Firebase'e yerel credential ile giriş yap
+        // 4. Firebase Auth Oturum Açma
         userCredential = await FirebaseAuth.instance.signInWithCredential(
           oauthCredential,
         );
 
+        // 5. Profil / Firestore Bilgileri
         String? displayName;
         if (appleCredential.givenName != null ||
             appleCredential.familyName != null) {
@@ -259,6 +272,7 @@ class _LoginPageState extends State<LoginPage> {
                   'createdAt': FieldValue.serverTimestamp(),
                 });
           }
+
           try {
             await NotificationService.syncFcmTokenToFirestore(userId: user.uid);
           } catch (e) {
@@ -271,8 +285,14 @@ class _LoginPageState extends State<LoginPage> {
 
       _showMessage("Apple ile başarıyla giriş yapıldı!", Colors.green);
       _navigateToHome();
+    } on FirebaseAuthException catch (e) {
+      print("Firebase Auth Hatası: ${e.code} - ${e.message}");
+      _showMessage(
+        "Giriş başarısız oldu: ${e.message ?? e.code}",
+        Colors.redAccent,
+      );
     } catch (e) {
-      print("Apple Giriş Hata Detayı: $e");
+      print("Genel Apple Giriş Hatası: $e");
       if (e.toString().contains("Canceled") || e.toString().contains("1001")) {
         _showMessage("Giriş işlemi iptal edildi.", Colors.orangeAccent);
       } else {
