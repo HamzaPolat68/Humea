@@ -23,7 +23,6 @@
     <key>CFBundleVersion</key>
     <string>$(FLUTTER_BUILD_NUMBER)</string>
 
-
     <!-- Google Sign-In & Firebase Auth Yönlendirme (URL Schemes) -->
     <key>CFBundleURLTypes</key>
     <array>
@@ -70,11 +69,15 @@
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
 
-    <!-- Kamera ve Galeri İzin Açıklamaları (App Store Onayı İçin Zorunludur) -->
+    <!-- Kamera, Galeri ve Mikrofon İzin Açıklamaları (App Store Onayı İçin Zorunludur) -->
     <key>NSCameraUsageDescription</key>
     <string>Profil fotoğrafı yüklemek ve uygulama içi görsel çekmek için kameranıza erişim gereklidir.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Profil fotoğrafı ve içerik yükleyebilmeniz için galerinizden fotoğraf seçilmesine izin vermeniz gereklidir.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>Seçtiğiniz fotoğrafların profilinize kaydedilebilmesi için galeri erişim izni gereklidir.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Kamera kullanımı sırasında ses kaydı gerekebileceği için mikrofon erişimi gereklidir.</string>
 
     <key>UILaunchStoryboardName</key>
     <string>LaunchScreen</string>

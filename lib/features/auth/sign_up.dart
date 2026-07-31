@@ -15,8 +15,13 @@ class SignUpPage extends StatefulWidget {
 class _SignUpPageState extends State<SignUpPage> {
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
+  bool _termsAccepted = false;
+  bool _isLoading = false;
 
-  // 1. Verileri almak için Controller'ları tanımlıyoruz
+  // EULA metnini güncellediğinizde bu sayıyı artırın.
+  // Login tarafındaki gate bu versiyonla karşılaştırma yapacak.
+  static const int currentTermsVersion = 1;
+
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -24,29 +29,12 @@ class _SignUpPageState extends State<SignUpPage> {
       TextEditingController();
 
   DateTime? _pickedDate;
-  Future<void> _pickDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(
-        2000,
-      ), // Kullanıcı takvimi açtığında varsayılan tarih
-      firstDate: DateTime(1950), // Seçilebilecek en eski tarih
-      lastDate: DateTime.now(), // Seçilebilecek en son tarih
-    );
-    if (picked != null && picked != _pickedDate) {
-      setState(() {
-        _pickedDate = picked;
-      });
-    }
-  }
 
-  // 2. Firebase Kayıt Fonksiyonu
   Future<void> _registerUser() async {
     final String email = _emailController.text.trim();
     final String password = _passwordController.text.trim();
     final String confirmPassword = _confirmPasswordController.text.trim();
 
-    // Basit kontroller: _pickedDate değişkenini kontrol ediyoruz
     if (email.isEmpty ||
         password.isEmpty ||
         _nameController.text.isEmpty ||
@@ -60,15 +48,22 @@ class _SignUpPageState extends State<SignUpPage> {
       return;
     }
 
+    if (!_termsAccepted) {
+      _showMessage(
+        "Devam etmek için Kullanım Şartları'nı kabul etmelisiniz.",
+        Colors.orangeAccent,
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
     try {
-      // Firebase'e kullanıcıyı kaydediyoruz
       UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(email: email, password: password);
 
-      // Kullanıcının adını profiline ekliyoruz
       await userCredential.user?.updateDisplayName(_nameController.text);
 
-      // Firestore'a verileri kaydediyoruz
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user!.uid)
@@ -79,13 +74,19 @@ class _SignUpPageState extends State<SignUpPage> {
             'email': email,
             'birthDate': _pickedDate!.toIso8601String(),
             'birthMonthDay':
-                "${_pickedDate!.month.toString().padLeft(2, '0')}-${_pickedDate!.day.toString().padLeft(2, '0')}", // YENİ
+                "${_pickedDate!.month.toString().padLeft(2, '0')}-${_pickedDate!.day.toString().padLeft(2, '0')}",
             'createdAt': FieldValue.serverTimestamp(),
+            'acceptedTermsVersion': currentTermsVersion,
+            'acceptedTermsAt': FieldValue.serverTimestamp(),
           });
 
-      await NotificationService.syncFcmTokenToFirestore(
-        userId: userCredential.user!.uid,
-      );
+      try {
+        await NotificationService.syncFcmTokenToFirestore(
+          userId: userCredential.user!.uid,
+        );
+      } catch (e) {
+        print("FCM Token senkronizasyon hatası es geçildi: $e");
+      }
 
       if (mounted) {
         _showMessage("Hesap başarıyla oluşturuldu! ✨", Colors.green);
@@ -113,10 +114,11 @@ class _SignUpPageState extends State<SignUpPage> {
       }
     } catch (e) {
       _showMessage("Beklenmedik bir hata oluştu.", Colors.redAccent);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // Renkli destek sunan güncel yardımcı mesaj fonksiyonu
   void _showMessage(String message, Color backgroundColor) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -125,6 +127,83 @@ class _SignUpPageState extends State<SignUpPage> {
         backgroundColor: backgroundColor,
         behavior: SnackBarBehavior.floating,
       ),
+    );
+  }
+
+  void _showTermsSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.85,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) {
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Kullanım Şartları",
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      child: const Text(
+                        "Humea'yı kullanarak aşağıdaki kuralları kabul etmiş sayılırsınız:\n\n"
+                        "• Nefret söylemi, ayrımcı içerik, taciz, zorbalık ve tehdit kesinlikle "
+                        "yasaktır. Bu tür davranışlarda bulunan hesaplar uyarı yapılmaksızın "
+                        "kapatılabilir.\n\n"
+                        "• Uygunsuz, müstehcen veya yasa dışı içerik paylaşımı sıfır toleransla "
+                        "karşılanır ve ilgili içerik/hesap derhal kaldırılır.\n\n"
+                        "• Diğer kullanıcıları rahatsız eden, taklit eden veya yanıltan davranışlar "
+                        "yasaktır.\n\n"
+                        "• Bildirilen veya tespit edilen ihlaller ekibimiz tarafından incelenir; "
+                        "gerekli durumlarda hesabınız uyarılmadan askıya alınabilir veya "
+                        "kapatılabilir.\n\n"
+                        "• Kişisel verileriniz Gizlilik Politikamız kapsamında işlenir; "
+                        "üçüncü taraflarla izniniz olmadan paylaşılmaz.\n\n"
+                        "• Humea ekibi, platformu güvenli ve keyifli tutmak için "
+                        "kuralları güncelleme hakkını saklı tutar. Kuralların ihlali durumunda kullanıcılar bilgilendirilmeden hesapları askıya alınabilir veya kapatılabilir.\n\n",
+                        style: TextStyle(fontSize: 14, height: 1.5),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF039BE5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                      ),
+                      onPressed: () {
+                        setState(() => _termsAccepted = true);
+                        Navigator.pop(context);
+                      },
+                      child: const Text(
+                        "Kabul Ediyorum",
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -149,195 +228,250 @@ class _SignUpPageState extends State<SignUpPage> {
             fit: BoxFit.cover,
           ),
         ),
-        child: SingleChildScrollView(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 30),
-            width: double.infinity,
-            height: MediaQuery.of(context).size.height,
-
-            // ... build metodu içerisindeki Column yapısını şu şekilde güncelleyin:
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const SizedBox(height: 50),
-                // Humea yazısı dışarıda kalıyor
-                FadeInDown(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text(
-                        "Humea",
-                        style: TextStyle(
-                          fontSize: 48,
-                          fontWeight: FontWeight.bold,
-                          color: Color.fromARGB(
-                            255,
-                            10,
-                            10,
-                            10,
-                          ), // Arka planınıza göre beyaz daha iyi görünebilir
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      const Icon(Icons.favorite, color: Colors.red, size: 30),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 40),
-
-                // TÜM İÇERİĞİ KUTU İÇİNE ALAN YAPI
-                FadeInUp(
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 10),
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(
-                        0.6,
-                      ), // Hafif şeffaf modern kutu
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.symmetric(horizontal: 30),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: IntrinsicHeight(
                     child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            "Kayıt Ol",
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        _buildTextField("Adınız ve Soyadınız", _nameController),
-                        const SizedBox(height: 15),
-                        InkWell(
-                          onTap: () async {
-                            DateTime? picked = await showDatePicker(
-                              context: context,
-                              initialDate: DateTime(
-                                2011,
-                              ), // Kullanıcı kolaylığı için varsayılan yıl
-                              firstDate: DateTime(1950),
-                              lastDate: DateTime.now(),
-                            );
-                            if (picked != null) {
-                              setState(() {
-                                _pickedDate =
-                                    picked; // Değişken adını _pickedDate olarak güncelledik
-                              });
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 15,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(15),
-                              boxShadow: [
-                                // Diğer alanlarla uyumlu olması için shadow eklendi
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 5),
+                        const SizedBox(height: 50),
+                        FadeInDown(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text(
+                                "Humea",
+                                style: TextStyle(
+                                  fontSize: 48,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color.fromARGB(255, 10, 10, 10),
                                 ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.calendar_today,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  _pickedDate == null
-                                      ? "Doğum Tarihi Seçin"
-                                      : "${_pickedDate!.day}.${_pickedDate!.month}.${_pickedDate!.year}",
-                                  style: TextStyle(
-                                    color: _pickedDate == null
-                                        ? Colors.grey
-                                        : Colors.black,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        _buildTextField("E-posta", _emailController),
-                        const SizedBox(height: 15),
-                        _buildTextField(
-                          "Şifre",
-                          _passwordController,
-                          isPassword: true,
-                        ),
-                        const SizedBox(height: 15),
-                        _buildTextField(
-                          "Şifre Tekrarı",
-                          _confirmPasswordController,
-                          isPassword: true,
-                        ),
-                        const SizedBox(height: 30),
-
-                        // Hesap Oluştur Butonu
-                        _buildGradientButton("Hesap Oluştur", _registerUser),
-
-                        const SizedBox(height: 3),
-
-                        // Zaten Hesabınız Var mı?
-                        Column(
-                          children: [
-                            const Text(
-                              "Zaten Bir Hesabınız Var Mı?",
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.bold,
-                                color: Color.fromARGB(255, 8, 8, 8),
                               ),
+                              const SizedBox(width: 5),
+                              const Icon(
+                                Icons.favorite,
+                                color: Colors.red,
+                                size: 30,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 40),
+
+                        FadeInUp(
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 10),
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.6),
+                              borderRadius: BorderRadius.circular(30),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
                             ),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => LoginPage(
-                                      initialEmail: _emailController.text
-                                          .trim(),
-                                      initialPassword: _passwordController.text
-                                          .trim(),
+                            child: Column(
+                              children: [
+                                const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    "Kayıt Ol",
+                                    style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                );
-                              },
-                              child: const Text(
-                                "Giriş Yap",
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  color: Colors.blueAccent,
-                                  fontWeight: FontWeight.bold,
                                 ),
-                              ),
+                                const SizedBox(height: 10),
+                                _buildTextField(
+                                  "Adınız ve Soyadınız",
+                                  _nameController,
+                                ),
+                                const SizedBox(height: 15),
+                                InkWell(
+                                  onTap: () async {
+                                    DateTime? picked = await showDatePicker(
+                                      context: context,
+                                      initialDate: DateTime(2011),
+                                      firstDate: DateTime(1950),
+                                      lastDate: DateTime.now(),
+                                    );
+                                    if (picked != null) {
+                                      setState(() {
+                                        _pickedDate = picked;
+                                      });
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 15,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(15),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.05),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 5),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.calendar_today,
+                                          color: Colors.grey,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Text(
+                                          _pickedDate == null
+                                              ? "Doğum Tarihi Seçin"
+                                              : "${_pickedDate!.day}.${_pickedDate!.month}.${_pickedDate!.year}",
+                                          style: TextStyle(
+                                            color: _pickedDate == null
+                                                ? Colors.grey
+                                                : Colors.black,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                _buildTextField("E-posta", _emailController),
+                                const SizedBox(height: 15),
+                                _buildTextField(
+                                  "Şifre",
+                                  _passwordController,
+                                  isPassword: true,
+                                ),
+                                const SizedBox(height: 15),
+                                _buildTextField(
+                                  "Şifre Tekrarı",
+                                  _confirmPasswordController,
+                                  isPassword: true,
+                                ),
+                                const SizedBox(height: 15),
+
+                                // EULA / Kullanım Şartları onayı
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Checkbox(
+                                      value: _termsAccepted,
+                                      activeColor: const Color(0xFF039BE5),
+                                      onChanged: (v) => setState(
+                                        () => _termsAccepted = v ?? false,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: GestureDetector(
+                                        onTap: _showTermsSheet,
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 12,
+                                          ),
+                                          child: RichText(
+                                            text: const TextSpan(
+                                              style: TextStyle(
+                                                color: Colors.black87,
+                                                fontSize: 13,
+                                              ),
+                                              children: [
+                                                TextSpan(
+                                                  text:
+                                                      "Okudum, kabul ediyorum: ",
+                                                ),
+                                                TextSpan(
+                                                  text:
+                                                      "Kullanım Şartları ve Gizlilik Politikası",
+                                                  style: TextStyle(
+                                                    color: Colors.blueAccent,
+                                                    fontWeight: FontWeight.bold,
+                                                    decoration: TextDecoration
+                                                        .underline,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 15),
+
+                                _buildGradientButton(
+                                  _isLoading
+                                      ? "Lütfen bekleyin..."
+                                      : "Hesap Oluştur",
+                                  _isLoading ? () {} : _registerUser,
+                                ),
+
+                                const SizedBox(height: 3),
+
+                                Column(
+                                  children: [
+                                    const Text(
+                                      "Zaten Bir Hesabınız Var Mı?",
+                                      style: TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color.fromARGB(255, 8, 8, 8),
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.pushReplacement(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => LoginPage(
+                                              initialEmail: _emailController
+                                                  .text
+                                                  .trim(),
+                                              initialPassword:
+                                                  _passwordController.text
+                                                      .trim(),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      child: const Text(
+                                        "Giriş Yap",
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          color: Colors.blueAccent,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
+                        const SizedBox(height: 50),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 50),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),
@@ -349,10 +483,8 @@ class _SignUpPageState extends State<SignUpPage> {
     TextEditingController controller, {
     bool isPassword = false,
   }) {
-    // Şifre tekrarı mı kontrol ediyoruz
     bool isConfirmField = hint == "Şifre Tekrarı";
 
-    // Hangi durum değişkenini kullanacağımızı seçiyoruz
     bool isVisible = isConfirmField
         ? _isConfirmPasswordVisible
         : _isPasswordVisible;
@@ -371,7 +503,6 @@ class _SignUpPageState extends State<SignUpPage> {
       ),
       child: TextField(
         controller: controller,
-        // Eğer şifre alanıysa ve görünür değilse gizle
         obscureText: isPassword && !isVisible,
         decoration: InputDecoration(
           contentPadding: const EdgeInsets.symmetric(

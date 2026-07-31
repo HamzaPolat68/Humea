@@ -1,4 +1,4 @@
-import 'dart:io'; // Cihaz içi dosyaları (File) okumak için eklendi
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,7 +6,110 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:humea/features/auth/login_page.dart';
 import 'package:humea/profile/edit_profile_page.dart';
+import 'package:humea/admin/admin_reports_page.dart';
+import 'package:humea/profile/blocked_users_page.dart';
 
+// ---------------------------------------------------------------------------
+// ADMIN ERİŞİM KARTI
+// ---------------------------------------------------------------------------
+class AdminAccessTile extends StatelessWidget {
+  const AdminAccessTile({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+
+    if (currentUserId == null) return const SizedBox.shrink();
+
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUserId)
+          .get(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const SizedBox.shrink();
+        }
+
+        final userData = snapshot.data!.data() as Map<String, dynamic>?;
+        final String role = userData?['role']?.toString() ?? '';
+
+        if (role != 'admin') {
+          return const SizedBox.shrink();
+        }
+
+        return Card(
+          color: Colors.red[50],
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+          margin: const EdgeInsets.only(bottom: 15),
+          child: ListTile(
+            leading: const Icon(
+              Icons.admin_panel_settings,
+              color: Colors.red,
+              size: 28,
+            ),
+            title: const Text(
+              "Admin Moderasyon Paneli",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.red,
+                fontSize: 16,
+              ),
+            ),
+            subtitle: const Text("Şikayet edilen içerikleri incele ve yönet"),
+            trailing: const Icon(Icons.chevron_right, color: Colors.red),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AdminReportsPage(),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ENGELLENENLER KARTI
+// ---------------------------------------------------------------------------
+class BlockedUsersTile extends StatelessWidget {
+  const BlockedUsersTile({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      margin: const EdgeInsets.only(bottom: 20),
+      child: ListTile(
+        leading: const Icon(Icons.block, color: Colors.black87, size: 26),
+        title: const Text(
+          "Engellenen Kullanıcılar",
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        subtitle: const Text("Engellediğin kişileri yönet ve engelleri kaldır"),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const BlockedUsersPage()),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PROFİL SAYFASI
+// ---------------------------------------------------------------------------
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -22,8 +125,8 @@ class _ProfilePageState extends State<ProfilePage> {
   String _mostFrequentEmoji = "Veri Yok";
   String _profileImageUrl = 'https://via.placeholder.com/150';
   bool _isLoadingStats = true;
+  bool _isDeletingAccount = false;
 
-  // 100 Adet Benzersiz Avatar Üreten Dinamik Generator
   final List<String> _avatarDatabase = List.generate(100, (index) {
     List<String> styles = [
       'bottts',
@@ -43,58 +146,58 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadProfileData() async {
-    if (_user == null) return;
+    await _user?.reload();
+    final User? updatedUser = FirebaseAuth.instance.currentUser;
+    if (updatedUser == null) return;
 
     try {
-      // 1. ADIM: Firestore 'users' koleksiyonundan kullanıcının güncel profil resmini çek
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
-          .doc(_user.uid)
+          .doc(updatedUser.uid)
           .get();
 
       String? firestoreImageUrl;
       if (userDoc.exists) {
         final userData = userDoc.data() as Map<String, dynamic>;
-        // Senin belirttiğin 'userImageUrl' alanına bakıyoruz
         firestoreImageUrl = userData['userImageUrl'] ?? userData['photoURL'];
       }
 
-      // Eğer Firestore'da varsa onu kullan, yoksa Firebase Auth profilindeki resme (yedek) bak
-      if (firestoreImageUrl != null && firestoreImageUrl.isNotEmpty) {
-        _profileImageUrl = firestoreImageUrl;
-      } else if (_user.photoURL != null && _user.photoURL!.isNotEmpty) {
-        _profileImageUrl = _user.photoURL!;
+      String targetUrl = 'https://via.placeholder.com/150';
 
-        // EĞER FİRESTORE'DA YOKSA: Arama sayfasında da görünebilmesi için
-        // Firestore dokümanını otomatik olarak mevcut fotoğrafla besle (Geriye dönük koruma)
-        await FirebaseFirestore.instance.collection('users').doc(_user.uid).set({
-          'userImageUrl': _user.photoURL,
-          'photoURL': _user
-              .photoURL, // Arama sayfasının patlamaması için ikisini de yazıyoruz
-        }, SetOptions(merge: true));
+      if (firestoreImageUrl != null && firestoreImageUrl.isNotEmpty) {
+        targetUrl = firestoreImageUrl;
+      } else if (updatedUser.photoURL != null &&
+          updatedUser.photoURL!.isNotEmpty) {
+        targetUrl = updatedUser.photoURL!;
+
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(updatedUser.uid)
+            .set({
+              'userImageUrl': updatedUser.photoURL,
+              'photoURL': updatedUser.photoURL,
+            }, SetOptions(merge: true));
       }
 
-      // 2. ADIM: Duygu verilerini Firestore'dan çek
       final moodSnapshot = await FirebaseFirestore.instance
           .collection('moods')
-          .where('userId', isEqualTo: _user.uid)
+          .where('userId', isEqualTo: updatedUser.uid)
           .get();
 
       final moodDocs = moodSnapshot.docs;
       int totalMoodCount = moodDocs.length;
 
-      // Emojileri skorlara göre eşleştir
       final Map<double, String> scoreToEmoji = {
-        10.0: "😍", // Harika
-        9.0: "🤩", // Heyecanlı
-        8.0: "🙂", // İyi/Mutlu
-        7.0: "😊", // Huzurlu/Pozitif
-        6.0: "😞", // Hüzünlü
-        5.0: "🤔", // Nötr/Düşünceli
-        4.0: "😡", // Öfkeli
-        3.0: "😟", // Endişeli
-        2.0: "💤", // Yorgun
-        1.0: "😰", // Çok Kaygılı
+        10.0: "😍",
+        9.0: "🤩",
+        8.0: "🙂",
+        7.0: "😊",
+        6.0: "😞",
+        5.0: "🤔",
+        4.0: "😡",
+        3.0: "😟",
+        2.0: "💤",
+        1.0: "😰",
       };
 
       Map<String, int> emojiCounts = {};
@@ -110,17 +213,16 @@ class _ProfilePageState extends State<ProfilePage> {
           ? emojiCounts.entries.reduce((a, b) => a.value > b.value ? a : b).key
           : "Veri Yok";
 
-      // 3. ADIM: Gönderi sayısını Firestore'dan çek
       final postSnapshot = await FirebaseFirestore.instance
           .collection('posts')
-          .where('userId', isEqualTo: _user.uid)
+          .where('userId', isEqualTo: updatedUser.uid)
           .get();
 
       int firestorePostCount = postSnapshot.docs.length;
 
-      // 4. ADIM: UI'ı güncelle
       if (mounted) {
         setState(() {
+          _profileImageUrl = targetUrl;
           _totalMoodCount = totalMoodCount;
           _mostFrequentEmoji = topEmoji;
           _feedPostCount = firestorePostCount;
@@ -137,7 +239,131 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // Akıştaki eski gönderi, yorum ve yanıtların profil resmini günceller
+  // ===========================================================================
+  // KALICI HESAP VE VERİ SİLME MEKANİZMASI
+  // ===========================================================================
+  Future<void> _confirmAndDeleteAccount() async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            SizedBox(width: 8),
+            Text("Hesabı Sil"),
+          ],
+        ),
+        content: const Text(
+          "Hesabınızı silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz. Paylaşımlarınız, duygu kayıtlarınız ve tüm profil verileriniz sistemden kalıcı olarak silinecektir.",
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("İptal", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              "Evet, Kalıcı Olarak Sil",
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      _deleteAccountAndData();
+    }
+  }
+
+  Future<void> _deleteAccountAndData() async {
+    if (_user == null) return;
+    final uid = _user.uid;
+
+    setState(() => _isDeletingAccount = true);
+
+    try {
+      final firestore = FirebaseFirestore.instance;
+
+      final postsQuery = await firestore
+          .collection('posts')
+          .where('userId', isEqualTo: uid)
+          .get();
+      for (var doc in postsQuery.docs) {
+        await doc.reference.delete();
+      }
+
+      final moodsQuery = await firestore
+          .collection('moods')
+          .where('userId', isEqualTo: uid)
+          .get();
+      for (var doc in moodsQuery.docs) {
+        await doc.reference.delete();
+      }
+
+      await firestore.collection('mood_stats').doc(uid).delete();
+      await firestore.collection('users').doc(uid).delete();
+
+      try {
+        await FirebaseStorage.instance
+            .ref()
+            .child('profile_images')
+            .child(uid)
+            .child('profile.jpg')
+            .delete();
+      } catch (e) {
+        debugPrint("Storage resim silme uyarısı/hatası: $e");
+      }
+
+      await _user.delete();
+
+      if (mounted) {
+        _showSnackBar(
+          "Hesabınız ve tüm verileriniz başarıyla silindi.",
+          Colors.green,
+        );
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+          (route) => false,
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      debugPrint("Auth silme hatası: ${e.code}");
+      if (mounted) {
+        setState(() => _isDeletingAccount = false);
+        if (e.code == 'requires-recent-login') {
+          _showSnackBar(
+            "Güvenlik gereği hesabınızı silebilmek için yeniden giriş yapmalısınız.",
+            Colors.redAccent,
+          );
+        } else {
+          _showSnackBar(
+            "Hesap silinirken bir sorun oluştu: ${e.message}",
+            Colors.redAccent,
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("Hesap silme genel hata: $e");
+      if (mounted) {
+        setState(() => _isDeletingAccount = false);
+        _showSnackBar(
+          "İşlem tamamlanamadı. Lütfen daha sonra tekrar deneyin.",
+          Colors.redAccent,
+        );
+      }
+    }
+  }
+
   Future<void> _syncProfileImageWithFirestore(String newImageUrl) async {
     try {
       final userId = _user?.uid ?? "";
@@ -188,23 +414,36 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<String?> _uploadImageToStorage(String localPath) async {
     try {
+      if (_user == null) return null;
+
       final file = File(localPath);
+      if (!await file.exists()) {
+        debugPrint("Seçilen yerel dosya bulunamadı: $localPath");
+        return null;
+      }
+
+      final String fileName =
+          'profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
       final storageRef = FirebaseStorage.instance
           .ref()
           .child('profile_images')
-          .child(_user!.uid)
-          .child('profile.jpg');
+          .child(_user.uid)
+          .child(fileName);
 
-      await storageRef.putFile(file);
-      final downloadUrl = await storageRef.getDownloadURL();
+      final uploadTask = await storageRef.putFile(
+        file,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+
+      final downloadUrl = await uploadTask.ref.getDownloadURL();
       return downloadUrl;
     } catch (e) {
-      debugPrint("Storage yükleme hatası: $e");
+      debugPrint("Storage yükleme hatası detay: $e");
       return null;
     }
   }
 
-  // Kameradan/Galeriden resim seçme işlemi
   Future<void> _pickImage(ImageSource source) async {
     final ImagePicker picker = ImagePicker();
     try {
@@ -217,7 +456,6 @@ class _ProfilePageState extends State<ProfilePage> {
       if (image != null) {
         _showSnackBar("Fotoğraf yükleniyor...", Colors.blue);
 
-        // 1. Firebase Storage'a yükle
         final downloadUrl = await _uploadImageToStorage(image.path);
 
         if (downloadUrl == null) {
@@ -228,22 +466,15 @@ class _ProfilePageState extends State<ProfilePage> {
           return;
         }
 
-        // 2. Auth profilini güncelle
         await _user!.updatePhotoURL(downloadUrl);
-
-        // 3. Eski postların resmini güncelle
         await _syncProfileImageWithFirestore(downloadUrl);
-
-        // 4. users dokümanını güncelle
         await FirebaseFirestore.instance.collection('users').doc(_user.uid).set(
           {'userImageUrl': downloadUrl, 'photoURL': downloadUrl},
           SetOptions(merge: true),
         );
 
         if (mounted) {
-          setState(() {
-            _profileImageUrl = downloadUrl;
-          });
+          await _loadProfileData();
           _showSnackBar(
             "Profil fotoğrafı başarıyla güncellendi!",
             Colors.green,
@@ -256,7 +487,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // Avatar seçimi yapıldığında tetiklenen fonksiyon
   Future<void> _selectAvatar(String avatarUrl) async {
     try {
       await _user!.updatePhotoURL(avatarUrl);
@@ -268,10 +498,8 @@ class _ProfilePageState extends State<ProfilePage> {
       }, SetOptions(merge: true));
 
       if (mounted) {
-        setState(() {
-          _profileImageUrl = avatarUrl;
-        });
         Navigator.pop(context);
+        await _loadProfileData();
         _showSnackBar("Avatarınız başarıyla güncellendi! ✨", Colors.green);
       }
     } catch (e) {
@@ -283,7 +511,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // Profil fotoğrafı kaynağı seçimi alt menüsü
   void _showImageSourceSelection() {
     showModalBottomSheet(
       context: context,
@@ -333,7 +560,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // Avatar Seçim Penceresi
   void _openAvatarSelectionDialog() {
     showModalBottomSheet(
       context: context,
@@ -417,14 +643,11 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // Hem URL'leri hem yerel dosyaları akıllıca ayırt eden fonksiyon
   ImageProvider _getProfileImage() {
     if (_profileImageUrl.startsWith('http://') ||
         _profileImageUrl.startsWith('https://')) {
-      // Eğer değer internet linki ise (DiceBear veya placeholder) NetworkImage kullanıyoruz
       return NetworkImage(_profileImageUrl);
     } else {
-      // Eğer internet linki değilse, cihazın kendi hafızasındaki yerel dosyadır (FileImage)
       return FileImage(File(_profileImageUrl));
     }
   }
@@ -444,8 +667,25 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
         centerTitle: true,
       ),
-      body: _isLoadingStats
-          ? const Center(child: CircularProgressIndicator(color: Colors.blue))
+      body: (_isLoadingStats || _isDeletingAccount)
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(color: Colors.red),
+                  if (_isDeletingAccount) ...[
+                    const SizedBox(height: 16),
+                    const Text(
+                      "Hesabınız ve verileriniz siliniyor...",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            )
           : SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
@@ -461,7 +701,6 @@ class _ProfilePageState extends State<ProfilePage> {
                               CircleAvatar(
                                 radius: 60,
                                 backgroundColor: Colors.white,
-                                // YENİLİK: Resim kaynağı artık dinamik metot üzerinden besleniyor
                                 backgroundImage: _getProfileImage(),
                               ),
                               Positioned(
@@ -492,13 +731,14 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                         ),
                         TextButton.icon(
-                          onPressed: () {
-                            Navigator.push(
+                          onPressed: () async {
+                            await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => const EditProfilePage(),
                               ),
                             );
+                            _loadProfileData();
                           },
                           icon: const Icon(
                             Icons.edit,
@@ -516,7 +756,6 @@ class _ProfilePageState extends State<ProfilePage> {
                   const SizedBox(height: 30),
                   Row(
                     children: [
-                      // 1. TOPLAM DUYGU KAYDI
                       Expanded(
                         child: StreamBuilder<QuerySnapshot>(
                           stream: FirebaseFirestore.instance
@@ -535,8 +774,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                       ),
                       const SizedBox(width: 8),
-
-                      // 2. AKIŞTA PAYLAŞIM
                       Expanded(
                         child: StreamBuilder<QuerySnapshot>(
                           stream: FirebaseFirestore.instance
@@ -552,8 +789,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                       ),
                       const SizedBox(width: 8),
-
-                      // 3. EN FAZLA PAYLAŞTIĞIN (Expanded eklendi)
                       Expanded(
                         child: _buildStatCard(
                           "En Fazla Paylaştığın",
@@ -565,7 +800,15 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 25),
+
+                  // ADMIN KARTI
+                  const AdminAccessTile(),
+
+                  // ENGELLENEN KULLANICILAR KARTI (Buraya eklendi)
+                  const BlockedUsersTile(),
+
+                  // ÇIKIŞ YAP BUTONU
                   SizedBox(
                     width: double.infinity,
                     height: 55,
@@ -599,6 +842,41 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ),
                   ),
+
+                  const SizedBox(height: 15),
+
+                  // HESABI SİL BUTONU
+                  SizedBox(
+                    width: double.infinity,
+                    height: 55,
+                    child: OutlinedButton.icon(
+                      onPressed: _confirmAndDeleteAccount,
+                      icon: const Icon(
+                        Icons.delete_forever,
+                        color: Colors.redAccent,
+                      ),
+                      label: const Text(
+                        "Hesabımı Sil",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.redAccent,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(
+                          color: Colors.redAccent,
+                          width: 2,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        backgroundColor: Colors.red.withOpacity(0.05),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 30),
                 ],
               ),
             ),
@@ -608,7 +886,6 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildStatCard(String title, String value, {String? emoji}) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-      // Yüksekliği sabitlemek yerine minHeight veriyoruz
       constraints: const BoxConstraints(minHeight: 100),
       decoration: BoxDecoration(
         color: Colors.white,

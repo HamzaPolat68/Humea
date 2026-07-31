@@ -1,9 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // FirebaseAuth eklendi
 import 'package:fl_chart/fl_chart.dart';
 
-class OtherUserProfilePage extends StatelessWidget {
+class OtherUserProfilePage extends StatefulWidget {
   final String targetUserId;
   final String targetUserName;
   final String targetPhotoUrl;
@@ -14,6 +15,102 @@ class OtherUserProfilePage extends StatelessWidget {
     required this.targetUserName,
     required this.targetPhotoUrl,
   });
+
+  @override
+  State<OtherUserProfilePage> createState() => _OtherUserProfilePageState();
+}
+
+class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
+  bool _isBlocking = false;
+
+  // DİNAMİK ENGELLEME FONKSİYONU (Tüm Kullanıcılar İçin)
+  Future<void> _blockUser() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final currentUserId = currentUser?.uid;
+
+    if (currentUserId == null || currentUserId == widget.targetUserId) {
+      return;
+    }
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("${widget.targetUserName} Engellensin mi?"),
+        content: const Text(
+          "Bu kullanıcıyı engellediğinizde paylaşımlarını artık akışınızda görmeyeceksiniz. Bu durum inceleme için geliştirici ekibine bildirilecektir.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("İptal"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Engelle", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() => _isBlocking = true);
+
+      try {
+        final firestore = FirebaseFirestore.instance;
+
+        // Engellemeye çalışan kullanıcının ismini alalım
+        final reporterUserName = currentUser?.displayName ?? "Bir kullanıcı";
+
+        // 1. Kendi engellenenler koleksiyonumuza ekle
+        await firestore
+            .collection('users')
+            .doc(currentUserId)
+            .collection('blocked_users')
+            .doc(widget.targetUserId)
+            .set({
+              'blockedUserId': widget.targetUserId,
+              'blockedUserName': widget.targetUserName,
+              'timestamp': FieldValue.serverTimestamp(),
+            });
+
+        // 2. GELİŞTİRİCİ EKİBİNE / ADMİNE BİLDİRİM GÖNDER
+        await firestore.collection('admin_notifications').add({
+          'type': 'user_blocked',
+          'reporterUserId': currentUserId,
+          'reporterUserName': reporterUserName,
+          'blockedUserId': widget.targetUserId,
+          'blockedUserName': widget.targetUserName,
+          'message':
+              "$reporterUserName kullanıcısı, ${widget.targetUserName} kullanıcısını engelledi.",
+          'timestamp': FieldValue.serverTimestamp(),
+          'isRead': false,
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("${widget.targetUserName} engellendi."),
+              backgroundColor: Colors.red,
+            ),
+          );
+          Navigator.pop(context);
+        }
+      } catch (e) {
+        debugPrint("Engelleme hatası: $e");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Engelleme işlemi sırasında bir sorun oluştu."),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isBlocking = false);
+      }
+    }
+  }
 
   ImageProvider _resolveImageProvider(String url) {
     if (url.startsWith('http://') || url.startsWith('https://')) {
@@ -124,13 +221,30 @@ class OtherUserProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     bool hasValidPhoto =
-        targetPhotoUrl.isNotEmpty &&
-        targetPhotoUrl != 'https://via.placeholder.com/150';
+        widget.targetPhotoUrl.isNotEmpty &&
+        widget.targetPhotoUrl != 'https://via.placeholder.com/150';
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(targetUserName),
+        title: Text(widget.targetUserName),
         backgroundColor: const Color(0xFF039BE5),
+        // --- DİNAMİK ENGELLE (BLOCK) BUTONU ---
+        actions: [
+          IconButton(
+            icon: _isBlocking
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Icon(Icons.block, color: Colors.white),
+            tooltip: "Kullanıcıyı Engelle",
+            onPressed: _isBlocking ? null : _blockUser,
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -141,18 +255,20 @@ class OtherUserProfilePage extends StatelessWidget {
             hasValidPhoto
                 ? CircleAvatar(
                     radius: 50,
-                    backgroundImage: _resolveImageProvider(targetPhotoUrl),
+                    backgroundImage: _resolveImageProvider(
+                      widget.targetPhotoUrl,
+                    ),
                     backgroundColor: Colors.grey[200],
                   )
                 : _buildAvatarPlaceholder(
-                    targetUserName,
+                    widget.targetUserName,
                     radius: 50,
                     fontSize: 32,
                   ),
 
             const SizedBox(height: 10),
             Text(
-              targetUserName,
+              widget.targetUserName,
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             const Divider(height: 40, thickness: 1),
@@ -186,7 +302,7 @@ class OtherUserProfilePage extends StatelessWidget {
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('moods')
-                    .where('userId', isEqualTo: targetUserId)
+                    .where('userId', isEqualTo: widget.targetUserId)
                     .orderBy('date', descending: false)
                     .snapshots(),
                 builder: (context, snapshot) {
@@ -282,7 +398,7 @@ class OtherUserProfilePage extends StatelessWidget {
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('posts')
-                  .where('userId', isEqualTo: targetUserId)
+                  .where('userId', isEqualTo: widget.targetUserId)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -297,7 +413,6 @@ class OtherUserProfilePage extends StatelessWidget {
 
                 final docs = snapshot.data!.docs;
 
-                // Sıralama esnasında tarih alanının alternatif isimlerini kontrol ediyoruz
                 docs.sort((a, b) {
                   final aData = a.data() as Map<String, dynamic>;
                   final bData = b.data() as Map<String, dynamic>;
@@ -361,7 +476,7 @@ class OtherUserProfilePage extends StatelessWidget {
                                 ),
                               )
                             : _buildAvatarPlaceholder(
-                                targetUserName,
+                                widget.targetUserName,
                                 radius: 22,
                                 fontSize: 14,
                               ),

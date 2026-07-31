@@ -4,6 +4,14 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.CAMERA"/>
 
+    <!-- GÖRSEL SEÇİMİ İÇİN EKLENEN GALERİ / DEPOLAMA İZİNLERİ -->
+    <!-- Android 13 ve üzeri (API 33+) için medya izinleri -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- Android 12 ve öncesi (API 32 ve altı) için depolama izinleri -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+
     <application
         android:label="Humea"
         android:name="${applicationName}"
@@ -21,18 +29,17 @@
             </intent-filter>
         </activity>
 
-        <!-- Sign in with Apple Web Authentication Activity (Application içine alındı) -->
-        <!-- CallbackActivity intent-filter alanı varsa varsayılan browser kafa karışıklığını önlemek için scheme'i netleştirin -->
-<activity
-    android:name="com.aboutyou.dart_packages.sign_in_with_apple.SignInWithAppleCallbackActivity"
-    android:exported="true">
-    <intent-filter>
-        <action android:name="android.intent.action.VIEW" />
-        <category android:name="android.intent.category.DEFAULT" />
-        <category android:name="android.intent.category.BROWSABLE" />
-        <data android:scheme="signinwithapple" />
-    </intent-filter>
-</activity>
+        <!-- Sign in with Apple Web Authentication Activity -->
+        <activity
+            android:name="com.aboutyou.dart_packages.sign_in_with_apple.SignInWithAppleCallbackActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="signinwithapple" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".MainActivity"
@@ -56,10 +63,11 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
     </application>
-    <meta-data
-    android:name="io.flutter.embedding.android.EnableImpeller"
-    android:value="false" />
 
     <queries>
         <intent>

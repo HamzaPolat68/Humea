@@ -33,8 +33,6 @@ int readSafeIntField(Object? data, String fieldName, {int fallback = 0}) {
   return fallback;
 }
 
-// Extract first http(s) URL from a possibly-wrapped string like
-// "[https://via.placeholder.com/150]()" or other markdown-like wrappers.
 String? extractFirstUrl(String input) {
   try {
     final match = RegExp(r'https?:\/\/[^\s)\]]+').firstMatch(input);
@@ -56,7 +54,6 @@ Future<void> _launchUrl(String url) async {
   }
 }
 
-// Metindeki linkleri tıklanabilir yapan RichText widget'ı üretir.
 Widget buildLinkifiedText(
   String text, {
   TextStyle? style,
@@ -147,7 +144,6 @@ class _FeedPageState extends State<FeedPage> {
   final Set<String> _likedPostIds = {};
   bool isPostLikedByMe = false;
 
-  // KAYDIRMA ÇUBUĞU İÇİN KONTROLLER
   final ScrollController _feedScrollController = ScrollController();
 
   @override
@@ -157,16 +153,13 @@ class _FeedPageState extends State<FeedPage> {
     _loadLikedComments();
   }
 
-  // Bellek sızıntısını önlemek için controller temizleniyor
   @override
   void dispose() {
     _feedScrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadLikedPosts() async {
-    // SharedPreferences for liked posts can be managed locally if needed
-  }
+  Future<void> _loadLikedPosts() async {}
 
   Future<void> _loadLikedComments() async {
     final prefs = await SharedPreferences.getInstance();
@@ -196,14 +189,12 @@ class _FeedPageState extends State<FeedPage> {
 
     final docRef = FirebaseFirestore.instance.collection('posts').doc(post.id);
 
-    // HER SEFERİNDE GÜNCEL LİSTEYE BAKARAK KONTROL ET
     final bool isCurrentlyLiked = post.likesList.any(
       (like) => like['userId'] == user.uid,
     );
 
     try {
       if (isCurrentlyLiked) {
-        // Beğeniyi kaldır
         await docRef.update({
           'likes': FieldValue.increment(-1),
           'likesList': FieldValue.arrayRemove([
@@ -215,7 +206,6 @@ class _FeedPageState extends State<FeedPage> {
           ]),
         });
       } else {
-        // Beğeniyi ekle
         await docRef.update({
           'likes': FieldValue.increment(1),
           'likesList': FieldValue.arrayUnion([
@@ -227,8 +217,6 @@ class _FeedPageState extends State<FeedPage> {
           ]),
         });
 
-        // Bildirim kısmı...
-        // Bildirim kısmı...
         if (post.userId != user.uid) {
           await FirebaseFirestore.instance.collection('notifications').add({
             'recipientId': post.userId,
@@ -291,10 +279,8 @@ class _FeedPageState extends State<FeedPage> {
 
       if (userId == null) return;
 
-      // 1. Paylaşımı Sil
       await firestore.collection('posts').doc(docId).delete();
 
-      // 2. İlgili mood kaydını bul ve sil
       double deletedMoodValue = 0.0;
       bool moodDeleted = false;
       final moodQuery = await firestore
@@ -329,7 +315,6 @@ class _FeedPageState extends State<FeedPage> {
       }
 
       if (moodDeleted) {
-        // 3. mood_stats Güncelleme (Atomic Transaction kullanılması önerilir)
         await firestore.runTransaction((transaction) async {
           DocumentReference statsRef = firestore
               .collection('mood_stats')
@@ -340,7 +325,6 @@ class _FeedPageState extends State<FeedPage> {
             Map<String, dynamic> data =
                 statsSnapshot.data() as Map<String, dynamic>;
 
-            // Örnek: Toplam puan ve sayı üzerinden yeni ortalama hesaplama
             int currentCount = data['count'] ?? 1;
             double currentTotal = (data['totalScore'] ?? deletedMoodValue)
                 .toDouble();
@@ -359,7 +343,6 @@ class _FeedPageState extends State<FeedPage> {
         });
       }
 
-      // 4. UI'ı Güncelle
       await widget.onPostDeleted();
 
       if (mounted) {
@@ -416,6 +399,123 @@ class _FeedPageState extends State<FeedPage> {
     );
   }
 
+  Future<void> _reportContent({
+    required String targetType,
+    required String targetId,
+    required String postId,
+    required String reportedUserId,
+  }) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    String selectedReason = 'Uygunsuz İçerik';
+    final List<String> reasons = [
+      'Uygunsuz İçerik',
+      'Nefret Söylemi veya Taciz',
+      'Spam veya Yanıltıcı',
+      'Şiddet veya Tehdit',
+      'Diğer',
+    ];
+
+    final TextEditingController otherReasonController = TextEditingController();
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          title: const Text("İçeriği Şikayet Et"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text("Lütfen bir şikayet nedeni seçin:"),
+              const SizedBox(height: 8),
+              DropdownButton<String>(
+                value: selectedReason,
+                isExpanded: true,
+                items: reasons
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                    .toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    setStateDialog(() {
+                      selectedReason = val;
+                    });
+                  }
+                },
+              ),
+              if (selectedReason == 'Diğer') ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: otherReasonController,
+                  maxLines: 3,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: "Lütfen şikayet nedeninizi açıklayın...",
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.all(10),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("İptal"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () {
+                if (selectedReason == 'Diğer' &&
+                    otherReasonController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Lütfen şikayet nedeninizi yazın."),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.pop(context, true);
+              },
+              child: const Text(
+                "Bildir",
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed == true) {
+      final String finalReason = selectedReason == 'Diğer'
+          ? "Diğer: ${otherReasonController.text.trim()}"
+          : selectedReason;
+
+      await FirebaseFirestore.instance.collection('reports').add({
+        'targetType': targetType,
+        'targetId': targetId,
+        'postId': postId,
+        'reportedUserId': reportedUserId,
+        'reporterUserId': currentUser.uid,
+        'reason': finalReason,
+        'status': 'pending',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "Şikayetiniz alındı. 24 saat içinde inceleme yapılacaktır.",
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
+
   void _openUserProfile(
     BuildContext context, {
     required String userId,
@@ -424,7 +524,7 @@ class _FeedPageState extends State<FeedPage> {
   }) {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
     if (userId.isEmpty || userId == currentUserId) {
-      return; // kendi profiline gitmesin
+      return;
     }
 
     Navigator.push(
@@ -439,7 +539,6 @@ class _FeedPageState extends State<FeedPage> {
     );
   }
 
-  // TARİH FORMATLAMA FONKSİYONU (Paketsiz Türkçe Format)
   String _formatDate(DateTime dateTime) {
     final List<String> months = [
       "Ocak",
@@ -525,7 +624,6 @@ class _FeedPageState extends State<FeedPage> {
           }
         }
 
-        // ETKİLEŞİMLİ VE ŞIK KAYDIRMA ÇUBUĞU
         return Scrollbar(
           controller: _feedScrollController,
           thumbVisibility: true,
@@ -540,10 +638,7 @@ class _FeedPageState extends State<FeedPage> {
             itemCount: bulutPostlari.length,
             itemBuilder: (context, index) {
               final post = bulutPostlari[index];
-              return _buildPostCard(
-                post,
-                key: ValueKey(post.id),
-              ); // ValueKey ekledik
+              return _buildPostCard(post, key: ValueKey(post.id));
             },
           ),
         );
@@ -558,10 +653,6 @@ class _FeedPageState extends State<FeedPage> {
         post.likesList.any((like) => like['userId'] == currentUserId);
     final bool isMyPost = currentUserId != null && post.userId == currentUserId;
 
-    debugPrint(
-      "DEBUG - Post ID: ${post.id} - User Image Değeri: '${post.userImage}'",
-    );
-
     final String? effectivePostImage = _resolveDisplayUserImage(
       userId: post.userId,
       fallbackImage: post.userImage,
@@ -573,13 +664,10 @@ class _FeedPageState extends State<FeedPage> {
     return Container(
       key: key,
       margin: const EdgeInsets.only(bottom: 20),
-
       decoration: BoxDecoration(
         color: const Color.fromARGB(255, 236, 234, 234),
-        borderRadius: BorderRadius.circular(24), // Daha yuvarlak köşeler
-        border: Border.all(
-          color: Colors.grey.withValues(alpha: 0.1),
-        ), // Çok hafif bir çerçeve
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
         boxShadow: [
           BoxShadow(
             color: Colors.blue.withValues(alpha: 0.05),
@@ -588,7 +676,7 @@ class _FeedPageState extends State<FeedPage> {
           ),
         ],
       ),
-      padding: const EdgeInsets.all(20), // İç boşlukları artırdık
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -632,12 +720,18 @@ class _FeedPageState extends State<FeedPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              post.userName,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
+                            // =================================================
+                            // YENİLİK: İSMİN TAMAMINI KAYDIRARAK GÖSTEREN WIDGET
+                            // =================================================
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              physics: const BouncingScrollPhysics(),
+                              child: Text(
+                                post.userName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
                               ),
                             ),
                             Text(
@@ -654,18 +748,13 @@ class _FeedPageState extends State<FeedPage> {
                   ),
                 ),
               ),
-              // 3. Butonlar (SABİT GENİŞLİKLİ - Taşmayı tamamen engeller)
               if (isMyPost)
                 Row(
-                  mainAxisSize:
-                      MainAxisSize.min, // Sadece butonlar kadar yer kapla
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      padding: EdgeInsets.all(
-                        4,
-                      ), // Çok küçük bir padding verelim
-                      constraints:
-                          const BoxConstraints(), // Padding dışı alanı sıfırla
+                      padding: const EdgeInsets.all(4),
+                      constraints: const BoxConstraints(),
                       onPressed: () => _editPost(post),
                       icon: const Icon(
                         Icons.edit_note,
@@ -674,7 +763,7 @@ class _FeedPageState extends State<FeedPage> {
                       ),
                     ),
                     IconButton(
-                      padding: EdgeInsets.all(4),
+                      padding: const EdgeInsets.all(4),
                       constraints: const BoxConstraints(),
                       onPressed: () =>
                           _deletePostAndMood(post.id, post.timestamp),
@@ -685,11 +774,26 @@ class _FeedPageState extends State<FeedPage> {
                       ),
                     ),
                   ],
+                )
+              else
+                IconButton(
+                  padding: const EdgeInsets.all(4),
+                  constraints: const BoxConstraints(),
+                  onPressed: () => _reportContent(
+                    targetType: 'post',
+                    targetId: post.id,
+                    postId: post.id,
+                    reportedUserId: post.userId,
+                  ),
+                  icon: Icon(
+                    Icons.flag_outlined,
+                    color: Colors.grey[600],
+                    size: 22,
+                  ),
                 ),
             ],
           ),
           const SizedBox(height: 16),
-          // Mood Bölümü
           Row(
             children: [
               Container(
@@ -722,8 +826,6 @@ class _FeedPageState extends State<FeedPage> {
               height: 1.4,
             ),
           ),
-
-          // PAYLAŞILAN FOTOĞRAF (varsa göster)
           if (post.imageUrl != null && post.imageUrl!.isNotEmpty) ...[
             const SizedBox(height: 12),
             ClipRRect(
@@ -760,10 +862,7 @@ class _FeedPageState extends State<FeedPage> {
               ),
             ),
           ],
-
           const SizedBox(height: 16),
-          // Beğeni Barı
-          // Beğeni Barı
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
@@ -772,7 +871,6 @@ class _FeedPageState extends State<FeedPage> {
             ),
             child: Row(
               children: [
-                // Beğeni Butonu
                 Expanded(
                   child: _interactionButton(
                     icon: isPostLikedByMe
@@ -787,7 +885,6 @@ class _FeedPageState extends State<FeedPage> {
                   ),
                 ),
                 const SizedBox(width: 4),
-                // Yorum Butonu
                 Expanded(
                   child: _interactionButton(
                     icon: Icons.chat_bubble_outline,
@@ -1007,15 +1104,13 @@ class _FeedPageState extends State<FeedPage> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         child: Row(
           children: [
-            // Kalp İkonu
             IconButton(
               icon: Icon(icon, color: isLiked ? Colors.red : Colors.grey[600]),
               onPressed: onLikeToggle,
-              constraints: const BoxConstraints(), // Padding'i küçültmek için
+              constraints: const BoxConstraints(),
               padding: EdgeInsets.zero,
             ),
             const SizedBox(width: 6),
-            // Sayı ve Label (Tıklanınca beğenenleri gösterir)
             GestureDetector(
               onTap: onShowLikes,
               child: Text(
@@ -1096,12 +1191,8 @@ class _FeedPageState extends State<FeedPage> {
         'userId': user.uid,
         'userName': user.displayName ?? 'Anonim',
         'userImage': user.photoURL ?? '',
-        // Use a client-side timestamp so the comment appears immediately
-        // in queries that order by 'timestamp'. ServerTimestamp can be
-        // null until the server writes it, which may hide the doc in
-        // ordered queries temporarily.
         'timestamp': Timestamp.now(),
-        'likesCount': 0, // Başlangıç beğeni sayısı
+        'likesCount': 0,
       };
 
       final postRef = FirebaseFirestore.instance
@@ -1147,7 +1238,6 @@ class _FeedPageState extends State<FeedPage> {
         'userId': user.uid,
         'userName': user.displayName ?? 'Anonim',
         'userImage': user.photoURL ?? '',
-        // Use local timestamp for immediate visibility in the UI
         'timestamp': Timestamp.now(),
         'likesCount': 0,
         'parentReplyId': parentReplyId ?? '',
@@ -1200,7 +1290,6 @@ class _FeedPageState extends State<FeedPage> {
       _likedCommentIds.add(commentId);
     }
 
-    // If caller wants the parent to rebuild, trigger setState here.
     if (!avoidParentSetState && mounted) {
       setState(() {});
     }
@@ -1241,7 +1330,6 @@ class _FeedPageState extends State<FeedPage> {
       await prefs.setBool(key, !isAlreadyLiked);
     } catch (e) {
       debugPrint('Yorum beğeni güncelleme hatası: $e');
-      // Revert optimistic change on error
       if (isAlreadyLiked) {
         _likedCommentIds.add(commentId);
       } else {
@@ -1466,8 +1554,6 @@ class _FeedPageState extends State<FeedPage> {
                       ],
                     ),
                     const SizedBox(height: 6),
-
-                    // YORUM METNİ (DÜZELTİLEN KISIM)
                     buildLinkifiedText(
                       commentText,
                       style: const TextStyle(
@@ -1479,9 +1565,7 @@ class _FeedPageState extends State<FeedPage> {
                         decoration: TextDecoration.underline,
                       ),
                     ),
-
                     const SizedBox(height: 8),
-                    // Replies (yorum yanıtları) görüntüleme
                     StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('posts')
@@ -1819,13 +1903,10 @@ class _FeedPageState extends State<FeedPage> {
                   commentId: doc.id,
                   recipientId: readSafeStringField(commentData, 'userId'),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   child: Row(
-                    children: const [
+                    children: [
                       Icon(Icons.reply, size: 18, color: Colors.blue),
                       SizedBox(width: 6),
                       Text(
@@ -1841,13 +1922,10 @@ class _FeedPageState extends State<FeedPage> {
                 InkWell(
                   borderRadius: BorderRadius.circular(12),
                   onTap: () => _editComment(postId, doc.id, commentText),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: Row(
-                      children: const [
+                      children: [
                         Icon(Icons.edit_outlined, size: 18, color: Colors.blue),
                         SizedBox(width: 6),
                         Text(
@@ -1862,18 +1940,38 @@ class _FeedPageState extends State<FeedPage> {
                 InkWell(
                   borderRadius: BorderRadius.circular(12),
                   onTap: () => _deleteComment(postId, doc.id),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: Row(
-                      children: const [
+                      children: [
                         Icon(Icons.delete_outline, size: 18, color: Colors.red),
                         SizedBox(width: 6),
                         Text(
                           'Sil',
                           style: TextStyle(color: Colors.red, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ] else ...[
+                InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _reportContent(
+                    targetType: 'comment',
+                    targetId: doc.id,
+                    postId: postId,
+                    reportedUserId: commentOwnerId,
+                  ),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.flag_outlined, size: 16, color: Colors.grey),
+                        SizedBox(width: 4),
+                        Text(
+                          'Şikayet Et',
+                          style: TextStyle(color: Colors.grey, fontSize: 12),
                         ),
                       ],
                     ),
