@@ -2,7 +2,10 @@ class MentionService {
   static const String mentionPrefix = '@';
 
   static List<String> extractMentions(String input) {
-    final matches = RegExp(r'@([a-zA-Z0-9_]+)').allMatches(input);
+    final matches = RegExp(
+      r'@([\p{L}\p{N}_]+)',
+      unicode: true,
+    ).allMatches(input);
     final mentions = <String>[];
 
     for (final match in matches) {

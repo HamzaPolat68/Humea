@@ -58,29 +58,118 @@ Widget buildLinkifiedText(
   String text, {
   TextStyle? style,
   TextStyle? linkStyle,
+  BuildContext? context,
 }) {
-  final RegExp urlRegex = RegExp(r'(https?:\/\/[^\s]+|www\.[^\s]+)');
+  final RegExp combinedRegex = RegExp(
+    r'(https?:\/\/[^\s]+|www\.[^\s]+|@([\p{L}\p{N}_]+))',
+    unicode: true,
+  );
   final List<InlineSpan> spans = [];
   int lastEnd = 0;
 
-  for (final match in urlRegex.allMatches(text)) {
+  for (final match in combinedRegex.allMatches(text)) {
+    final String token = match.group(0)!;
+
     if (match.start > lastEnd) {
       spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
     }
 
-    final String url = match.group(0)!;
-    spans.add(
-      TextSpan(
-        text: url,
-        style:
-            linkStyle ??
-            const TextStyle(
-              color: Colors.blue,
-              decoration: TextDecoration.underline,
-            ),
-        recognizer: TapGestureRecognizer()..onTap = () => _launchUrl(url),
-      ),
-    );
+    if (token.startsWith('http://') ||
+        token.startsWith('https://') ||
+        token.startsWith('www.')) {
+      spans.add(
+        TextSpan(
+          text: token,
+          style:
+              linkStyle ??
+              const TextStyle(
+                color: Colors.blue,
+                decoration: TextDecoration.underline,
+              ),
+          recognizer: TapGestureRecognizer()..onTap = () => _launchUrl(token),
+        ),
+      );
+    } else if (token.startsWith('@')) {
+      final String mention = token.substring(1).trim().toLowerCase();
+      spans.add(
+        TextSpan(
+          text: token,
+          style:
+              linkStyle ??
+              const TextStyle(
+                color: Colors.blue,
+                decoration: TextDecoration.underline,
+                fontWeight: FontWeight.w600,
+              ),
+          recognizer: TapGestureRecognizer()
+            ..onTap = () async {
+              if (context == null || !context.mounted) return;
+
+              // DÜZELTME: Firestore'un `where(isEqualTo:)` sorgusu büyük/küçük
+              // harf duyarlıdır. Not metnindeki mention, note_page.dart
+              // tarafından her zaman küçük harfe çevrilerek eklenir, ancak
+              // Firestore'daki gerçek `searchName` alanı küçük harfli
+              // olmayabilir (örn. "AhmetYilmaz"). Bu durumda doğrudan eşitlik
+              // sorgusu hiçbir sonuç döndürmüyor ve tıklama sessizce hiçbir
+              // şey yapmıyordu. Bunun yerine tüm kullanıcıları çekip
+              // normalize edilmiş (trim + lowercase) karşılaştırma yapıyoruz
+              // — tıpkı note_page.dart'ın öneri listesi oluştururken
+              // yaptığı gibi.
+              final usersSnapshot = await FirebaseFirestore.instance
+                  .collection('users')
+                  .get();
+
+              if (!context.mounted) return;
+
+              QueryDocumentSnapshot? matchedDoc;
+              for (final doc in usersSnapshot.docs) {
+                final data = doc.data();
+                final docSearchName = readSafeStringField(
+                  data,
+                  'searchName',
+                ).trim().toLowerCase();
+                if (docSearchName.isNotEmpty && docSearchName == mention) {
+                  matchedDoc = doc;
+                  break;
+                }
+              }
+
+              if (matchedDoc == null) return;
+
+              final targetUser = matchedDoc.data() as Map<String, dynamic>;
+              final targetUserId = matchedDoc.id;
+              final targetUserName =
+                  (targetUser['name'] ??
+                          targetUser['displayName'] ??
+                          targetUser['userName'] ??
+                          mention)
+                      .toString();
+              // NOT: photoUrl alan adı note_page.dart ile tutarlı olacak
+              // şekilde önce kontrol ediliyor, diğer olası eski alan adları
+              // yedek olarak bırakıldı.
+              final targetPhotoUrl =
+                  (targetUser['photoUrl'] ??
+                          targetUser['photoURL'] ??
+                          targetUser['userImageUrl'] ??
+                          '')
+                      .toString();
+
+              if (!context.mounted) return;
+
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => OtherUserProfilePage(
+                    targetUserId: targetUserId,
+                    targetUserName: targetUserName,
+                    targetPhotoUrl: targetPhotoUrl,
+                  ),
+                ),
+              );
+            },
+        ),
+      );
+    }
 
     lastEnd = match.end;
   }
@@ -720,9 +809,6 @@ class _FeedPageState extends State<FeedPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // =================================================
-                            // YENİLİK: İSMİN TAMAMINI KAYDIRARAK GÖSTEREN WIDGET
-                            // =================================================
                             SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               physics: const BouncingScrollPhysics(),
@@ -820,6 +906,7 @@ class _FeedPageState extends State<FeedPage> {
           const SizedBox(height: 12),
           buildLinkifiedText(
             post.note,
+            context: context,
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey[800],
@@ -1556,6 +1643,7 @@ class _FeedPageState extends State<FeedPage> {
                     const SizedBox(height: 6),
                     buildLinkifiedText(
                       commentText,
+                      context: context,
                       style: const TextStyle(
                         fontSize: 14,
                         color: Colors.black87,

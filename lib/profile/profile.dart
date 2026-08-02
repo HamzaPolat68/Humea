@@ -369,6 +369,11 @@ class _ProfilePageState extends State<ProfilePage> {
       final userId = _user?.uid ?? "";
       if (userId.isEmpty) return;
 
+      await FirebaseFirestore.instance.collection('users').doc(userId).set({
+        'userImageUrl': newImageUrl,
+        'photoURL': newImageUrl,
+      }, SetOptions(merge: true));
+
       final postsSnapshot = await FirebaseFirestore.instance
           .collection('posts')
           .get();
@@ -738,7 +743,9 @@ class _ProfilePageState extends State<ProfilePage> {
                                 builder: (context) => const EditProfilePage(),
                               ),
                             );
-                            _loadProfileData();
+                            if (mounted) {
+                              await _loadProfileData();
+                            }
                           },
                           icon: const Icon(
                             Icons.edit,

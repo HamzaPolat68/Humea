@@ -19,6 +19,8 @@ String buildNotificationMessage(Map<String, dynamic>? data) {
       return '$senderName yanıtını beğendi.';
     case 'like':
       return '$senderName gönderini beğendi.';
+    case 'mention':
+      return '$senderName seni etiketledi.';
     default:
       return '$senderName yeni bir bildirim gönderdi.';
   }
@@ -38,7 +40,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
       case 'comment':
       case 'reply':
       case 'reply_reply':
-        return Icons.chat_bubble_outline_rounded;
+      case 'mention':
+        return Icons.alternate_email_rounded;
       case 'like':
       case 'comment_like':
       case 'reply_like':
@@ -54,6 +57,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
       case 'comment':
       case 'reply':
       case 'reply_reply':
+      case 'mention':
         return Colors.blue;
       case 'like':
       case 'comment_like':

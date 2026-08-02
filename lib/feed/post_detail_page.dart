@@ -407,6 +407,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                             const SizedBox(height: 10),
                             buildLinkifiedText(
                               post.note,
+                              context: context,
                               style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.black87,
@@ -540,6 +541,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                                   // Yorum Metni (Siyah Renk Zorunlu Yapıldı)
                                   buildLinkifiedText(
                                     text,
+                                    context: context,
                                     style: const TextStyle(
                                       fontSize: 14,
                                       color: Colors.black87,

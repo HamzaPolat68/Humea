@@ -12,6 +12,14 @@ void main() {
       expect(mentions, ['ali', 'ayse']);
     });
 
+    test('extracts Turkish-character mentions from text', () {
+      const text = 'Merhaba @İpek, bugün @Şule ile konuşacağım.';
+
+      final mentions = extractMentions(text);
+
+      expect(mentions, ['ipek', 'şule']);
+    });
+
     test('returns empty list when there are no mentions', () {
       expect(extractMentions('Sadece normal bir metin'), isEmpty);
     });
