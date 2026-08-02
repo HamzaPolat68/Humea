@@ -1,7 +1,7 @@
 name: humea
 description: "A new Flutter project."
 publish_to: 'none'
-version: 1.5.0+20
+version: 1.5.1
 
 
 environment:
