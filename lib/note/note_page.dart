@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:humea/services/mention_service.dart';
 import 'package:humea/search/other_user_profile_page.dart';
 import '../models/post_model.dart';
+import 'package:humea/feed/feed.dart';
 
 class NotePage extends StatefulWidget {
   final String selectedEmoji;
@@ -863,13 +864,28 @@ class _NotePageState extends State<NotePage> {
                               user.uid,
                             );
 
+                            // ... paylaşım ve bildirim işlemleri bittikten sonra ...
+
                             if (mounted) {
                               scaffoldMessenger.showSnackBar(
                                 const SnackBar(
                                   content: Text("Duygun paylaşıldı! ✨"),
+                                  backgroundColor: Colors.green,
                                 ),
                               );
-                              navigator.pop();
+
+                              // Geri gitmek yerine doğrudan FeedPage'e yönlendirir ve önceki ara sayfaları yığından temizler
+                              Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => FeedPage(
+                                    onPostDeleted: () async {
+                                      // Gerekirse yenileme işlemi, gerekmiyorsa boş bırakabilirsiniz
+                                    },
+                                  ),
+                                ),
+                                (route) => route.isFirst,
+                              );
                             }
                           } catch (e) {
                             debugPrint("Hata: $e");

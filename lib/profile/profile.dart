@@ -472,14 +472,18 @@ class _ProfilePageState extends State<ProfilePage> {
         }
 
         await _user!.updatePhotoURL(downloadUrl);
-        await _syncProfileImageWithFirestore(downloadUrl);
         await FirebaseFirestore.instance.collection('users').doc(_user.uid).set(
           {'userImageUrl': downloadUrl, 'photoURL': downloadUrl},
           SetOptions(merge: true),
         );
 
+        // Arka planda çalışsın
+        _syncProfileImageWithFirestore(downloadUrl);
+
         if (mounted) {
-          await _loadProfileData();
+          setState(() {
+            _profileImageUrl = downloadUrl;
+          });
           _showSnackBar(
             "Profil fotoğrafı başarıyla güncellendi!",
             Colors.green,
@@ -494,25 +498,32 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _selectAvatar(String avatarUrl) async {
     try {
+      // 1. Temel kullanıcı alanlarını hızlıca güncelle
       await _user!.updatePhotoURL(avatarUrl);
-      await _syncProfileImageWithFirestore(avatarUrl);
-
       await FirebaseFirestore.instance.collection('users').doc(_user.uid).set({
         'userImageUrl': avatarUrl,
         'photoURL': avatarUrl,
       }, SetOptions(merge: true));
 
+      // 2. Ağır Firestore senkronizasyonunu arka plana at (await etmiyoruz)
+      _syncProfileImageWithFirestore(avatarUrl);
+
+      // 3. Kullanıcıyı bekletmeden modalı kapat, UI'ı yenile ve bildirimi göster
       if (mounted) {
+        setState(() {
+          _profileImageUrl = avatarUrl;
+        });
         Navigator.pop(context);
-        await _loadProfileData();
         _showSnackBar("Avatarınız başarıyla güncellendi! ✨", Colors.green);
       }
     } catch (e) {
       debugPrint("Avatar seçim hatası: $e");
-      _showSnackBar(
-        "Avatar güncellenemedi, lütfen tekrar deneyin.",
-        Colors.redAccent,
-      );
+      if (mounted) {
+        _showSnackBar(
+          "Avatar güncellenemedi, lütfen tekrar deneyin.",
+          Colors.redAccent,
+        );
+      }
     }
   }
 

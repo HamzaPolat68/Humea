@@ -677,7 +677,7 @@ class _HomePageState extends State<HomePage> {
                         onPressed: () async {
                           bool isSaved = await _saveTodayMood(_selectedEmoji);
                           if (isSaved) {
-                            Navigator.push(
+                            final result = await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => NotePage(
@@ -686,6 +686,13 @@ class _HomePageState extends State<HomePage> {
                                 ),
                               ),
                             );
+
+                            if (result == true && mounted) {
+                              setState(() {
+                                _selectedIndex =
+                                    0; // Feed sekmesinin BottomNavigationBar'daki index'i neyse onu yazın
+                              });
+                            }
                           }
                         },
                         shape: RoundedRectangleBorder(

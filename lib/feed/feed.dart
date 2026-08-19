@@ -671,81 +671,97 @@ class _FeedPageState extends State<FeedPage> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('posts')
-          .orderBy('timestamp', descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              "Hata: ${snapshot.error}",
-              style: const TextStyle(color: Colors.white),
-            ),
-          );
-        }
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: Colors.white),
-          );
-        }
-        if (snapshot.data == null || snapshot.data!.docs.isEmpty) {
-          return const Center(
-            child: Text(
-              "Henüz bir paylaşım yok...",
-              style: TextStyle(color: Colors.white, fontSize: 16),
-            ),
-          );
-        }
-
-        final docs = snapshot.data!.docs;
-        final List<Post> bulutPostlari = [];
-
-        for (var doc in docs) {
-          try {
-            final data = doc.data() as Map<String, dynamic>;
-            if (data['timestamp'] == null) continue;
-            data['id'] = doc.id;
-            bulutPostlari.add(Post.fromFirestore(data));
-          } catch (e) {
-            debugPrint("Dönüşüm hatası: $e");
+    return Scaffold(
+      backgroundColor: const Color.fromARGB(255, 185, 185, 184),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('posts')
+            .orderBy('timestamp', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: Text(
+                "Hata: ${snapshot.error}",
+                style: const TextStyle(color: Colors.white),
+              ),
+            );
           }
-        }
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            );
+          }
+          if (snapshot.data == null || snapshot.data!.docs.isEmpty) {
+            return const Center(
+              child: Text(
+                "Henüz bir paylaşım yok...",
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            );
+          }
 
-        return Scrollbar(
-          controller: _feedScrollController,
-          thumbVisibility: true,
-          trackVisibility: false,
-          thickness: 6.0,
-          radius: const Radius.circular(10),
-          interactive: true,
-          child: ListView.builder(
+          final docs = snapshot.data!.docs;
+          final List<Post> bulutPostlari = [];
+
+          for (var doc in docs) {
+            try {
+              final data = doc.data() as Map<String, dynamic>;
+              if (data['timestamp'] == null) continue;
+              data['id'] = doc.id;
+              bulutPostlari.add(Post.fromFirestore(data));
+            } catch (e) {
+              debugPrint("Dönüşüm hatası: $e");
+            }
+          }
+
+          return Scrollbar(
             controller: _feedScrollController,
-            padding: const EdgeInsets.all(15),
-            physics: const BouncingScrollPhysics(),
-            itemCount: bulutPostlari.length,
-            itemBuilder: (context, index) {
-              final post = bulutPostlari[index];
-              return _buildPostCard(post, key: ValueKey(post.id));
-            },
-          ),
-        );
-      },
+            thumbVisibility: true,
+            trackVisibility: false,
+            thickness: 6.0,
+            radius: const Radius.circular(10),
+            interactive: true,
+            child: ListView.builder(
+              controller: _feedScrollController,
+              padding: const EdgeInsets.all(15),
+              physics: const BouncingScrollPhysics(),
+              itemCount: bulutPostlari.length,
+              itemBuilder: (context, index) {
+                final post = bulutPostlari[index];
+                return _buildPostCard(post, key: ValueKey(post.id));
+              },
+            ),
+          );
+        },
+      ),
     );
   }
 
   Widget _buildPostCard(Post post, {Key? key}) {
     final String? currentUserId = FirebaseAuth.instance.currentUser?.uid;
+
+    // 1. Humea veya Doğum Günü Postu Kontrolü
+    final bool isHumeaPost =
+        post.userId == "Humea" ||
+        post.userName == "Humea" ||
+        post.userImage == "assets/logo.png";
+
     final bool isPostLikedByMe =
         currentUserId != null &&
         post.likesList.any((like) => like['userId'] == currentUserId);
-    final bool isMyPost = currentUserId != null && post.userId == currentUserId;
+    final bool isMyPost =
+        !isHumeaPost && currentUserId != null && post.userId == currentUserId;
 
-    final String? effectivePostImage = _resolveDisplayUserImage(
-      userId: post.userId,
-      fallbackImage: post.userImage,
-    );
+    // 2. Humea ise sabit isim ve görsel ata
+    final String displayName = isHumeaPost ? "Humea" : post.userName;
+
+    final String? effectivePostImage = isHumeaPost
+        ? null
+        : _resolveDisplayUserImage(
+            userId: post.userId,
+            fallbackImage: post.userImage,
+          );
     final String? postImageUrl = effectivePostImage != null
         ? extractFirstUrl(effectivePostImage)
         : null;
@@ -756,10 +772,10 @@ class _FeedPageState extends State<FeedPage> {
       decoration: BoxDecoration(
         color: const Color.fromARGB(255, 236, 234, 234),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
+        border: Border.all(color: Colors.grey.withOpacity(0.1)),
         boxShadow: [
           BoxShadow(
-            color: Colors.blue.withValues(alpha: 0.05),
+            color: Colors.blue.withOpacity(0.05),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -774,12 +790,14 @@ class _FeedPageState extends State<FeedPage> {
               Expanded(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: () => _openUserProfile(
-                    context,
-                    userId: post.userId,
-                    userName: post.userName,
-                    userImage: post.userImage,
-                  ),
+                  onTap: isHumeaPost
+                      ? null
+                      : () => _openUserProfile(
+                          context,
+                          userId: post.userId,
+                          userName: post.userName,
+                          userImage: post.userImage,
+                        ),
                   child: Row(
                     children: [
                       Container(
@@ -787,20 +805,30 @@ class _FeedPageState extends State<FeedPage> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: Colors.blue.withValues(alpha: 0.2),
+                            color: isHumeaPost
+                                ? Colors.purple.withOpacity(0.4)
+                                : Colors.blue.withOpacity(0.2),
                           ),
                         ),
                         child: CircleAvatar(
                           radius: 20,
-                          backgroundImage: effectivePostImage != null
-                              ? (postImageUrl != null
-                                    ? NetworkImage(postImageUrl)
-                                          as ImageProvider
-                                    : FileImage(File(effectivePostImage))
-                                          as ImageProvider)
-                              : null,
-                          child: effectivePostImage == null
-                              ? Text(post.userName[0].toUpperCase())
+                          backgroundColor: Colors.white,
+                          // Humea postu ise doğrudan assets/logo.png gösterir
+                          backgroundImage: isHumeaPost
+                              ? const AssetImage('assets/logo.png')
+                              : (effectivePostImage != null
+                                    ? (postImageUrl != null
+                                          ? NetworkImage(postImageUrl)
+                                                as ImageProvider
+                                          : FileImage(File(effectivePostImage))
+                                                as ImageProvider)
+                                    : null),
+                          child: (!isHumeaPost && effectivePostImage == null)
+                              ? Text(
+                                  displayName.isNotEmpty
+                                      ? displayName[0].toUpperCase()
+                                      : '?',
+                                )
                               : null,
                         ),
                       ),
@@ -809,22 +837,30 @@ class _FeedPageState extends State<FeedPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              physics: const BouncingScrollPhysics(),
-                              child: Text(
-                                post.userName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
+                            Row(
+                              children: [
+                                Text(
+                                  displayName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
                                 ),
-                              ),
+                                if (isHumeaPost) ...[
+                                  const SizedBox(width: 4),
+                                  const Icon(
+                                    Icons.verified,
+                                    color: Colors.blue,
+                                    size: 16,
+                                  ),
+                                ],
+                              ],
                             ),
                             Text(
                               _formatDate(post.timestamp),
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.grey[400],
+                                color: Colors.grey[600],
                               ),
                             ),
                           ],
@@ -861,7 +897,7 @@ class _FeedPageState extends State<FeedPage> {
                     ),
                   ],
                 )
-              else
+              else if (!isHumeaPost)
                 IconButton(
                   padding: const EdgeInsets.all(4),
                   constraints: const BoxConstraints(),
@@ -2080,53 +2116,59 @@ void _showLikesDialog(
 ) {
   showModalBottomSheet(
     context: context,
+    backgroundColor: Colors.transparent,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
     builder: (context) {
-      return Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text(
-              "Beğenenler",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      return Material(
+        // <-- EKLENDİ
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text(
+                "Beğenenler",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
             ),
-          ),
-          Expanded(
-            child: likesList.isEmpty
-                ? const Center(child: Text("Henüz beğenen yok."))
-                : ListView.builder(
-                    itemCount: likesList.length,
-                    itemBuilder: (context, index) {
-                      final like = likesList[index];
-                      final String userImage = (like['userImage'] ?? '')
-                          .toString();
-                      final String userName = (like['userName'] ?? 'Anonim')
-                          .toString();
+            Expanded(
+              child: likesList.isEmpty
+                  ? const Center(child: Text("Henüz beğenen yok."))
+                  : ListView.builder(
+                      itemCount: likesList.length,
+                      itemBuilder: (context, index) {
+                        final like = likesList[index];
+                        final String userImage = (like['userImage'] ?? '')
+                            .toString();
+                        final String userName = (like['userName'] ?? 'Anonim')
+                            .toString();
 
-                      final String? likeImageUrl = extractFirstUrl(userImage);
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundImage: userImage.isNotEmpty
-                              ? (likeImageUrl != null
-                                    ? NetworkImage(likeImageUrl)
-                                    : FileImage(File(userImage)))
-                              : null,
-                          child: userImage.isEmpty
-                              ? Text(
-                                  userName.isNotEmpty
-                                      ? userName[0].toUpperCase()
-                                      : 'A',
-                                )
-                              : null,
-                        ),
-                        title: Text(userName),
-                      );
-                    },
-                  ),
-          ),
-        ],
+                        final String? likeImageUrl = extractFirstUrl(userImage);
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundImage: userImage.isNotEmpty
+                                ? (likeImageUrl != null
+                                      ? NetworkImage(likeImageUrl)
+                                      : FileImage(File(userImage)))
+                                : null,
+                            child: userImage.isEmpty
+                                ? Text(
+                                    userName.isNotEmpty
+                                        ? userName[0].toUpperCase()
+                                        : 'A',
+                                  )
+                                : null,
+                          ),
+                          title: Text(userName),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       );
     },
   );
